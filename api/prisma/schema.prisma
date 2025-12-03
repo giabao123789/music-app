@@ -1,0 +1,174 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model Track {
+  id        String   @id @default(cuid()) @map("_id")
+  title     String
+  duration  Int
+  coverUrl  String
+  audioUrl  String
+  artistId  String
+  createdAt DateTime @default(now())
+
+  artist       Artist        @relation(fields: [artistId], references: [id])
+  trackArtists TrackArtist[]
+  albumId      String?
+  album        Album?        @relation(fields: [albumId], references: [id])
+
+  playlistItems PlaylistTrack[]
+  favorites     Favorite[]
+
+  genre      Genre?
+  lyrics     String?
+  popularity Int       @default(0)
+  comments   Comment[]
+}
+
+model Album {
+  id        String   @id @default(cuid()) @map("_id")
+  title     String
+  coverUrl  String?
+  artistId  String
+  artist    Artist   @relation(fields: [artistId], references: [id])
+  releaseAt DateTime?
+  tracks    Track[]
+}
+
+model TrackArtist {
+  id        String  @id @default(cuid()) @map("_id")
+  trackId   String
+  artistId  String
+  isPrimary Boolean @default(false) // nghệ sĩ chính (The Weeknd)
+
+  track  Track  @relation(fields: [trackId], references: [id])
+  artist Artist @relation(fields: [artistId], references: [id])
+
+  @@unique([trackId, artistId])
+}
+
+model Artist {
+  id     String  @id @default(cuid()) @map("_id")
+  name   String
+  avatar String?
+
+  userId String? @unique
+  user   User?   @relation(fields: [userId], references: [id])
+
+  trackArtists TrackArtist[]
+  tracks       Track[]
+  albums       Album[]
+  mainGenre    Genre?
+  bio          String?
+  followers    Follow[]
+}
+
+model User {
+  id        String     @id @default(cuid()) @map("_id")
+  email     String     @unique
+  password  String
+  name      String?
+  role      Role       @default(USER)
+  verified  Boolean    @default(false)
+  playlists Playlist[]
+  favorites Favorite[]
+  createdAt DateTime   @default(now())
+  Artist    Artist?
+  follows   Follow[]
+  comments  Comment[]
+}
+
+enum Role {
+  USER
+  ARTIST
+  ADMIN
+}
+
+enum Genre {
+  POP
+  BALLAD
+  RAP
+  INDIE
+  RNB
+  EDM
+  OTHER
+}
+
+model Playlist {
+  id        String          @id @default(cuid()) @map("_id")
+  name      String
+  userId    String
+  user      User            @relation(fields: [userId], references: [id])
+  items     PlaylistTrack[]
+  createdAt DateTime        @default(now())
+}
+
+model PlaylistTrack {
+  id         String   @id @default(cuid()) @map("_id")
+  playlistId String
+  trackId    String
+  order      Int      @default(0)
+  addedAt    DateTime @default(now())
+
+  playlist Playlist @relation(fields: [playlistId], references: [id])
+  track    Track    @relation(fields: [trackId], references: [id])
+
+  @@unique([playlistId, trackId])
+}
+
+model Favorite {
+  id        String   @id @default(cuid()) @map("_id")
+  userId    String
+  trackId   String
+  createdAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id])
+  track Track @relation(fields: [trackId], references: [id])
+
+  @@unique([userId, trackId])
+}
+
+enum OtpPurpose {
+  REGISTER
+  RESET_PASSWORD
+  LOGIN
+}
+
+model EmailOtp {
+  id        String     @id @default(cuid()) @map("_id")
+  email     String
+  code      String
+  purpose   OtpPurpose
+  expiresAt DateTime
+  createdAt DateTime   @default(now())
+
+  @@index([email])
+}
+
+model Follow {
+  id        String   @id @default(cuid()) @map("_id")
+  userId    String
+  artistId  String
+  createdAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id])
+  artist Artist @relation(fields: [artistId], references: [id])
+
+  @@unique([userId, artistId])
+}
+
+model Comment {
+  id        String   @id @default(cuid()) @map("_id")
+  userId    String
+  trackId   String
+  content   String
+  createdAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id])
+  track Track @relation(fields: [trackId], references: [id])
+}

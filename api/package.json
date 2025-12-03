@@ -1,0 +1,40 @@
+{
+  "name": "music-api",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "node dist/main.js",
+    "start:dev": "ts-node-dev --respawn --transpile-only src/main.ts",
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@nestjs/common": "^10.0.0",
+    "@nestjs/core": "^10.0.0",
+    "@nestjs/jwt": "^11.0.1",
+    "@nestjs/passport": "^11.0.5",
+    "@nestjs/platform-express": "^10.4.20",
+    "@prisma/client": "^6.18.0",
+    "bcrypt": "^6.0.0",
+    "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^12.5.0",
+    "date-fns": "^4.1.0",
+    "mongodb": "^7.0.0",
+    "multer": "^2.0.2",
+    "music-metadata": "^11.10.3",
+    "node-fetch": "^2.7.0",
+    "nodemailer": "^7.0.10",
+    "passport": "^0.7.0",
+    "passport-jwt": "^4.0.1",
+    "reflect-metadata": "^0.1.13",
+    "rxjs": "^7.8.1",
+    "uuid": "^13.0.0"
+  },
+  "devDependencies": {
+    "@types/multer": "^2.0.0",
+    "@types/uuid": "^10.0.0",
+    "ts-node": "^10.9.1",
+    "ts-node-dev": "^2.0.0"
+  },
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
+  }
+}

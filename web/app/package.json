@@ -1,0 +1,11 @@
+{
+  "name": "music-app",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n API,WEB -c green,cyan \"cd api && npm run start:dev\" \"cd web && npm run dev\""
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
