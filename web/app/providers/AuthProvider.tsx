@@ -1,8 +1,16 @@
 "use client";
 
-import { SessionProvider } from "next-auth/react";
 import type { ReactNode } from "react";
 
-export default function AuthProvider({ children }: { children: ReactNode }) {
-  return <SessionProvider>{children}</SessionProvider>;
+/**
+ * AuthProvider mới KHÔNG dùng NextAuth nữa.
+ * Vẫn giữ nguyên tên component để các chỗ import không bị lỗi.
+ */
+export default function AuthProvider({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  // Chỉ render children, không wrap SessionProvider
+  return <>{children}</>;
 }

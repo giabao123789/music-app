@@ -8,13 +8,14 @@ datasource db {
 }
 
 model Track {
-  id        String   @id @default(cuid()) @map("_id")
+  id        String    @id @default(cuid()) @map("_id")
   title     String
   duration  Int
   coverUrl  String
   audioUrl  String
   artistId  String
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
+  deletedAt DateTime?
 
   artist       Artist        @relation(fields: [artistId], references: [id])
   trackArtists TrackArtist[]
@@ -22,7 +23,7 @@ model Track {
   album        Album?        @relation(fields: [albumId], references: [id])
 
   playlistItems PlaylistTrack[]
-  favorites     Favorite[]
+  favorites     Favorite[] // ✅ relation lại với Favorite
 
   genre      Genre?
   lyrics     String?
@@ -31,11 +32,11 @@ model Track {
 }
 
 model Album {
-  id        String   @id @default(cuid()) @map("_id")
+  id        String    @id @default(cuid()) @map("_id")
   title     String
   coverUrl  String?
   artistId  String
-  artist    Artist   @relation(fields: [artistId], references: [id])
+  artist    Artist    @relation(fields: [artistId], references: [id])
   releaseAt DateTime?
   tracks    Track[]
 }
@@ -76,7 +77,7 @@ model User {
   role      Role       @default(USER)
   verified  Boolean    @default(false)
   playlists Playlist[]
-  favorites Favorite[]
+  favorites Favorite[] // ✅ thêm lại relation này
   createdAt DateTime   @default(now())
   Artist    Artist?
   follows   Follow[]
@@ -127,6 +128,7 @@ model Favorite {
   trackId   String
   createdAt DateTime @default(now())
 
+  // ✅ quan hệ ngược về User & Track
   user  User  @relation(fields: [userId], references: [id])
   track Track @relation(fields: [trackId], references: [id])
 
@@ -151,13 +153,15 @@ model EmailOtp {
 }
 
 model Follow {
-  id        String   @id @default(cuid()) @map("_id")
-  userId    String
-  artistId  String
-  createdAt DateTime @default(now())
+  id       String @id @default(cuid()) @map("_id")
+  userId   String
+  artistId String
 
+  // Quan hệ ngược về User và Artist (khớp với User.follows, Artist.followers)
   user   User   @relation(fields: [userId], references: [id])
   artist Artist @relation(fields: [artistId], references: [id])
+
+  createdAt DateTime @default(now())
 
   @@unique([userId, artistId])
 }

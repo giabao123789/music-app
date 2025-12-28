@@ -6,6 +6,20 @@ import Link from "next/link";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
+// Chuẩn hoá URL media
+function resolveMediaUrl(raw?: string | null): string {
+  if (!raw) return "";
+
+  // Nếu đã là link đầy đủ -> giữ nguyên
+  if (/^https?:\/\//i.test(raw)) return raw;
+
+  // Nếu path bắt đầu bằng "/" -> ghép API_BASE
+  if (raw.startsWith("/")) return `${API_BASE}${raw}`;
+
+  // Còn lại -> ghép API_BASE + "/"
+  return `${API_BASE}/${raw}`;
+}
+
 type ArtistItem = {
   id: string;
   name: string;
@@ -13,7 +27,7 @@ type ArtistItem = {
   tracksCount: number;
 };
 
-// Lấy tên chính từ chuỗi nhiều ca sĩ (nếu còn)
+// Lấy tên chính từ chuỗi nhiều ca sĩ
 function getPrimaryName(fullName: string | null | undefined): string {
   if (!fullName) return "";
   let s = fullName;
@@ -22,7 +36,6 @@ function getPrimaryName(fullName: string | null | undefined): string {
   return s.trim();
 }
 
-// Kiểm tra tên có phải dạng ghép nhiều người không
 function isCombinedName(name: string | null | undefined): boolean {
   if (!name) return false;
   return name.includes(",") || name.includes("&");
@@ -59,7 +72,6 @@ export default function ArtistsPage() {
     };
   }, []);
 
-  // 💡 Bỏ hết những artist tên kiểu "A, B, C" hoặc có "&"
   const baseArtists = useMemo(
     () => artists.filter((a) => !isCombinedName(a.name)),
     [artists],
@@ -140,7 +152,7 @@ export default function ArtistsPage() {
         ) : filteredArtists.length === 0 ? (
           <div className="py-16 text-center text-white/50">
             <p className="text-sm">
-              Không tìm thấy nghệ sĩ nào phù hợp với từ khóa{" "}
+              Không tìm thấy nghệ sĩ nào cho từ khóa{" "}
               <span className="font-semibold text-white/80">
                 “{search}”
               </span>
@@ -151,6 +163,15 @@ export default function ArtistsPage() {
           <section className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
             {filteredArtists.map((artist) => {
               const primaryName = getPrimaryName(artist.name);
+
+              // FIX avatar: luôn đi qua resolveMediaUrl nếu là /uploads...
+              const avatarSrc =
+                artist.avatar &&
+                (artist.avatar.startsWith("/uploads") ||
+                  artist.avatar.startsWith("uploads"))
+                  ? resolveMediaUrl(artist.avatar)
+                  : artist.avatar || "/default-artist.jpg";
+
               return (
                 <Link
                   key={artist.id}
@@ -158,27 +179,20 @@ export default function ArtistsPage() {
                   className="group rounded-2xl bg-white/5 border border-white/10 p-3 flex flex-col items-center text-center hover:bg-white/10 hover:border-violet-400/60 transition-all shadow-sm hover:shadow-lg hover:shadow-violet-900/40"
                 >
                   <div className="relative h-20 w-20 md:h-24 md:w-24 rounded-full overflow-hidden bg-black/40 border border-white/20 mb-3">
-                    {artist.avatar ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={artist.avatar}
-                        alt={primaryName || artist.name}
-                        className="h-full w-full object-cover group-hover:scale-105 transition-transform"
-                      />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center text-3xl">
-                        🎤
-                      </div>
-                    )}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={avatarSrc}
+                      alt={primaryName || artist.name}
+                      className="h-full w-full object-cover group-hover:scale-105 transition-transform"
+                    />
                   </div>
-                  <div className="w-full">
-                    <p className="text-sm md:text-[15px] font-semibold text-white line-clamp-1">
-                      {primaryName || artist.name}
-                    </p>
-                    <p className="text-[11px] text-white/60 mt-1">
-                      {artist.tracksCount} bài hát
-                    </p>
-                  </div>
+
+                  <p className="text-sm md:text-[15px] font-semibold text-white line-clamp-1">
+                    {primaryName || artist.name}
+                  </p>
+                  <p className="text-[11px] text-white/60 mt-1">
+                    {artist.tracksCount} bài hát
+                  </p>
                 </Link>
               );
             })}

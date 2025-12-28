@@ -1,0 +1,546 @@
+{
+  "info": {
+    "name": "Music App API (Localhost 3001)",
+    "_postman_id": "c3d1dd2a-0000-0000-0000-music-app",
+    "description": "Collection test toàn bộ API của music-app (NestJS + Prisma + MongoDB)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3001"
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "userId",
+      "value": ""
+    },
+    {
+      "key": "artistId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register Start",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"123456\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/register-start",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "register-start"]
+            }
+          }
+        },
+        {
+          "name": "Verify OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"code\": \"123456\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/verify-otp",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "verify-otp"]
+            }
+          }
+        },
+        {
+          "name": "Login (Lấy token)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "let json = pm.response.json();",
+                  "if (json && json.accessToken) {",
+                  "  pm.collectionVariables.set('token', json.accessToken);",
+                  "  console.log('Đã lưu token vào collectionVariables');",
+                  "}",
+                  "if (json && json.user && json.user.id) {",
+                  "  pm.collectionVariables.set('userId', json.user.id);",
+                  "  console.log('Đã lưu userId vào collectionVariables');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"123456\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Public - Tracks",
+      "item": [
+        {
+          "name": "Get All Tracks (homepage)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/tracks",
+              "host": ["{{baseUrl}}"],
+              "path": ["tracks"]
+            }
+          }
+        },
+        {
+          "name": "Get Top Tracks",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/tracks/top",
+              "host": ["{{baseUrl}}"],
+              "path": ["tracks", "top"]
+            }
+          }
+        },
+        {
+          "name": "Track Detail (by id)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/tracks/{{trackId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["tracks", "{{trackId}}"]
+            }
+          }
+        },
+        {
+          "name": "Play Track (+1 popularity)",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/tracks/{{trackId}}/play",
+              "host": ["{{baseUrl}}"],
+              "path": ["tracks", "{{trackId}}", "play"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Public - Artists & Follow",
+      "item": [
+        {
+          "name": "List Artists (public)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/artist",
+              "host": ["{{baseUrl}}"],
+              "path": ["artist"]
+            }
+          }
+        },
+        {
+          "name": "Artist Detail (public)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/artist/{{artistId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["artist", "{{artistId}}"]
+            }
+          }
+        },
+        {
+          "name": "Follow Artist",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/artist/{{artistId}}/follow",
+              "host": ["{{baseUrl}}"],
+              "path": ["artist", "{{artistId}}", "follow"]
+            }
+          }
+        },
+        {
+          "name": "Unfollow Artist",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/artist/{{artistId}}/follow",
+              "host": ["{{baseUrl}}"],
+              "path": ["artist", "{{artistId}}", "follow"]
+            }
+          }
+        },
+        {
+          "name": "Get Follow Count",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/artist/{{artistId}}/follow-count",
+              "host": ["{{baseUrl}}"],
+              "path": ["artist", "{{artistId}}", "follow-count"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Favorites",
+      "item": [
+        {
+          "name": "Toggle Favorite",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"trackId\": \"{{trackId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/favorites/toggle",
+              "host": ["{{baseUrl}}"],
+              "path": ["favorites", "toggle"]
+            }
+          }
+        },
+        {
+          "name": "My Favorites",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/favorites",
+              "host": ["{{baseUrl}}"],
+              "path": ["favorites"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Playlists",
+      "item": [
+        {
+          "name": "Create Playlist",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"My Playlist\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/{{userId}}/playlists",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "{{userId}}", "playlists"]
+            }
+          }
+        },
+        {
+          "name": "Get My Playlists",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users/{{userId}}/playlists",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "{{userId}}", "playlists"]
+            }
+          }
+        },
+        {
+          "name": "Add Track to Playlist",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"trackId\": \"{{trackId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/playlists/{{playlistId}}/tracks",
+              "host": ["{{baseUrl}}"],
+              "path": ["playlists", "{{playlistId}}", "tracks"]
+            }
+          }
+        },
+        {
+          "name": "Get Playlist Detail",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/playlists/{{playlistId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["playlists", "{{playlistId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Comments",
+      "item": [
+        {
+          "name": "Get Comments of Track",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/tracks/{{trackId}}/comments",
+              "host": ["{{baseUrl}}"],
+              "path": ["tracks", "{{trackId}}", "comments"]
+            }
+          }
+        },
+        {
+          "name": "Add Comment to Track",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Bài này hay quá!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/tracks/{{trackId}}/comments",
+              "host": ["{{baseUrl}}"],
+              "path": ["tracks", "{{trackId}}", "comments"]
+            }
+          }
+        },
+        {
+          "name": "Delete Comment (owner/admin)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/tracks/comments/{{commentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["tracks", "comments", "{{commentId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Artist Dashboard (ROLE_ARTIST)",
+      "item": [
+        {
+          "name": "Get My Artist Profile (/artist/me)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/artist/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["artist", "me"]
+            }
+          }
+        },
+        {
+          "name": "Get My Tracks",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/artist/me/tracks",
+              "host": ["{{baseUrl}}"],
+              "path": ["artist", "me", "tracks"]
+            }
+          }
+        },
+        {
+          "name": "Get My Albums",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/artist/me/albums",
+              "host": ["{{baseUrl}}"],
+              "path": ["artist", "me", "albums"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin - Users",
+      "item": [
+        {
+          "name": "List Users",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/users",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "users"]
+            }
+          }
+        },
+        {
+          "name": "Update User Role / Verified",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"ARTIST\",\n  \"verified\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/users/{{userId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "users", "{{userId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin - Artists",
+      "item": [
+        {
+          "name": "List Artists (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/artists",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "artists"]
+            }
+          }
+        },
+        {
+          "name": "Get Artist Detail (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/artists/{{artistId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "artists", "{{artistId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin - Tracks",
+      "item": [
+        {
+          "name": "List All Tracks (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/tracks",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "tracks"]
+            }
+          }
+        },
+        {
+          "name": "Update Track Metadata (title, genre, album)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"New title\",\n  \"genre\": \"POP\",\n  \"albumId\": null\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/tracks/{{trackId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "tracks", "{{trackId}}"]
+            }
+          }
+        },
+        {
+          "name": "Toggle Lock Track (soft delete)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/tracks/{{trackId}}/lock",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "tracks", "{{trackId}}", "lock"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

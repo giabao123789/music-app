@@ -88,6 +88,14 @@ export class ArtistController {
     const userId = this.extractUserId(req);
     return this.artistService.myAlbums(userId);
   }
+  // ✅ NEW: /artist/me/followers -> artist xem tên người theo dõi mình
+// GET /artist/me/followers  -> nghệ sĩ xem danh sách người theo dõi của mình
+@Get('me/followers')
+async myFollowers(@Req() req: any) {
+  const userId = this.extractUserId(req);
+  return this.artistService.myFollowers(userId);
+}
+
 
   // update profile (name, avatar, bio,…)
   @Patch('me/profile')
@@ -213,6 +221,22 @@ async deleteAlbum(@Req() req: any, @Param('id') id: string) {
 
   @Get(':id')
   async getArtistById(@Param('id') id: string) {
+    return this.artistService.getArtistById(id);
+  }
+}
+@Controller('artists')
+export class PublicArtistsController {
+  constructor(private readonly artistService: ArtistService) {}
+
+  // GET /artists  -> dùng cho home, trang nghệ sĩ, vv.
+  @Get()
+  listArtists() {
+    return this.artistService.listArtists();
+  }
+
+  // GET /artists/:id  -> chi tiết nghệ sĩ nếu sau này bạn dùng
+  @Get(':id')
+  getArtist(@Param('id') id: string) {
     return this.artistService.getArtistById(id);
   }
 }

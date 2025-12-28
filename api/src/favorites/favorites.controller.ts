@@ -1,65 +1,50 @@
 // api/src/favorites/favorites.controller.ts
 import {
-  Body,
   Controller,
-  Get,
   Post,
+  Get,
+  Body,
   Req,
+  UseGuards,
+  BadRequestException,
 } from '@nestjs/common';
+import { Request } from 'express';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { FavoritesService } from './favorites.service';
-import { JwtService } from '@nestjs/jwt';
+
+function extractUserIdFromReq(req: Request): string {
+  const u: any = (req as any).user;
+
+  const userId =
+    u?.userId ?? // kiểu hay dùng trong Nest
+    u?.id ?? // nếu validate() trả về { id: ... }
+    u?.sub ?? // nếu trả về payload gốc { sub, email, role }
+    u?._id ??
+    null;
+
+  if (!userId) {
+    throw new BadRequestException('Missing authenticated user id');
+  }
+
+  return String(userId);
+}
 
 @Controller('favorites')
+@UseGuards(JwtAuthGuard)
 export class FavoritesController {
-  constructor(
-    private readonly favoritesService: FavoritesService,
-    private readonly jwtService: JwtService,
-  ) {}
+  constructor(private readonly favoritesService: FavoritesService) {}
 
-  /**
-   * Helper: lấy userId từ Authorization Bearer token
-   * (hoặc từ cookie accessToken nếu bạn dùng cookie)
-   */
-  private extractUserId(req: any): string | undefined {
-    let token: string | null = null;
-
-    // 1. Ưu tiên lấy từ Authorization: Bearer xxx
-    const auth = req.headers['authorization'] as string | undefined;
-    if (auth && auth.startsWith('Bearer ')) {
-      token = auth.substring(7);
-    }
-
-    // 2. Nếu không có, thử lấy từ cookie accessToken (nếu bạn dùng cookie)
-    if (!token && req.cookies && req.cookies['accessToken']) {
-      token = req.cookies['accessToken'];
-    }
-
-    if (!token) return undefined;
-
-    try {
-      const payload: any = this.jwtService.verify(token);
-
-      // support nhiều kiểu payload khác nhau
-      return (
-        payload.sub ||
-        payload.id ||
-        payload.userId || // nhiều code cũ hay dùng userId
-        undefined
-      );
-    } catch {
-      return undefined;
-    }
-  }
-
-  @Post('toggle')
-  async toggle(@Req() req: any, @Body('trackId') trackId: string) {
-    const userId = this.extractUserId(req);
-    return this.favoritesService.toggle(userId, trackId);
-  }
-
+  /** Lấy danh sách bài hát yêu thích của user hiện tại */
   @Get()
-  async list(@Req() req: any) {
-    const userId = this.extractUserId(req);
+  async list(@Req() req: Request) {
+    const userId = extractUserIdFromReq(req);
     return this.favoritesService.list(userId);
+  }
+
+  /** Toggle yêu thích 1 bài hát (body: { trackId }) */
+  @Post('toggle')
+  async toggle(@Req() req: Request, @Body('trackId') trackId: string) {
+    const userId = extractUserIdFromReq(req);
+    return this.favoritesService.toggle(userId, trackId);
   }
 }

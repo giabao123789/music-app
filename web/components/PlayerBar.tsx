@@ -1,7 +1,7 @@
-// web/components/PlayerBar.tsx
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { usePlayer } from "../app/providers/PlayerProvider";
 import PlaylistSelectDialog from "./PlaylistSelectDialog";
 
@@ -37,7 +37,29 @@ function getAuthToken(): string | null {
   return null;
 }
 
+// ✅ Helper chuẩn hoá URL ảnh cover (fix avatar bị lỗi)
+function resolveCoverUrl(raw?: string | null): string {
+  if (!raw) return "";
+
+  if (
+    raw.startsWith("http://") ||
+    raw.startsWith("https://") ||
+    raw.startsWith("data:")
+  ) {
+    return raw;
+  }
+
+  let path = raw;
+  if (path.startsWith("/")) {
+    path = path.slice(1);
+  }
+
+  return `${API_BASE}/${path}`;
+}
+
 export default function PlayerBar() {
+  const router = useRouter();
+
   const {
     current,
     playing,
@@ -53,7 +75,7 @@ export default function PlayerBar() {
     clearQueue,
     index,
     setIndex,
-    setQueue, // dùng để cache lyrics vào queue
+    setQueue,
   } = usePlayer();
 
   const [shuffle, setShuffle] = useState(false);
@@ -83,7 +105,6 @@ export default function PlayerBar() {
     setLyricsError(null);
     setLyrics(current?.lyrics ?? null);
 
-    // đóng dialog playlist khi đổi bài
     setShowPlaylistDialog(false);
   }, [current?.id, current?.lyrics]);
 
@@ -142,6 +163,16 @@ export default function PlayerBar() {
     );
   };
 
+  // ------------ ĐI TỚI TRANG NGHỆ SĨ -------------
+  // (bây giờ KHÔNG dùng trang tracks nữa)
+  const goToArtistPage = () => {
+    const artistId =
+      (current as any)?.artist?.id || (current as any)?.artistId;
+    if (artistId) {
+      router.push(`/artists/${artistId}`);
+    }
+  };
+
   // ------------ API: yêu thích -------------
   const handleFavorite = async () => {
     if (!current || favLoading) return;
@@ -180,8 +211,6 @@ export default function PlayerBar() {
   // ------------ PLAYLIST: mở dialog chọn playlist -------------
   const handleAddToPlaylist = () => {
     if (!current || playlistLoading) return;
-    // không gọi API cũ /playlists/default/add-track nữa
-    // chỉ mở dialog, việc gọi API đúng /playlists/:id/tracks do PlaylistSelectDialog xử lý
     setShowPlaylistDialog(true);
   };
 
@@ -262,7 +291,7 @@ export default function PlayerBar() {
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={t.coverUrl}
+                      src={resolveCoverUrl(t.coverUrl)}
                       alt={t.title}
                       className="w-8 h-8 rounded-lg object-cover flex-shrink-0"
                     />
@@ -298,19 +327,19 @@ export default function PlayerBar() {
       {showLyrics && (
         <div
           className="
-    fixed top-24 right-6 z-[60]
-    w-[380px] max-h-[70vh]
-    bg-[#0d0f1a]/90
-    border border-white/10
-    rounded-2xl backdrop-blur-xl
-    shadow-[0_0_25px_rgba(78,20,140,0.5)]
-    flex flex-col
-    animate-slide-left
-  "
+            fixed top-24 right-6 z-[60]
+            w-[380px] max-h-[70vh]
+            bg-[#020818]/95
+            border border-cyan-400/30
+            rounded-2xl backdrop-blur-xl
+            shadow-[0_0_35px_rgba(56,189,248,0.45)]
+            flex flex-col
+            animate-slide-left
+          "
         >
           <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
             <div className="min-w-0">
-              <div className="text-sm font-semibold truncate">
+              <div className="text-sm font-semibold truncate text-cyan-100">
                 Lời bài hát - {current.title}
               </div>
               <div className="text-[11px] text-slate-300 truncate">
@@ -321,16 +350,14 @@ export default function PlayerBar() {
             <button
               onClick={() => setShowLyrics(false)}
               className="w-8 h-8 flex items-center justify-center 
-          rounded-full bg-white/10 hover:bg-white/20 text-xs"
+                rounded-full bg-white/10 hover:bg-white/20 text-xs"
               title="Đóng"
             >
               ✕
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto px-4 py-3 
-      text-sm leading-relaxed text-slate-100 whitespace-pre-wrap"
-          >
+          <div className="flex-1 overflow-y-auto px-4 py-3 text-sm leading-relaxed text-slate-100 whitespace-pre-wrap">
             {lyricsLoading && (
               <p className="text-slate-300 text-sm">
                 Đang tải lời bài hát...
@@ -363,10 +390,10 @@ export default function PlayerBar() {
           <div
             className="
               rounded-2xl
-              bg-gradient-to-r from-[#050816] via-[#020418] to-[#01010f]
-              border border-white/10
-              shadow-[0_-18px_45px_rgba(0,0,0,0.85)]
-              backdrop-blur-xl
+              bg-gradient-to-r from-[#020617] via-[#021528] to-[#012042]
+              border border-cyan-400/20
+              shadow-[0_-20px_60px_rgba(0,0,0,0.9)]
+              backdrop-blur-2xl
               px-4
               pt-3
               pb-4
@@ -378,17 +405,24 @@ export default function PlayerBar() {
               <div className="flex items-center gap-3 min-w-0">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={current.coverUrl}
+                  src={resolveCoverUrl(current.coverUrl)}
                   alt={current.title}
-                  className="w-12 h-12 rounded-xl object-cover shadow-lg"
+                  className="w-12 h-12 rounded-xl object-cover shadow-[0_0_20px_rgba(56,189,248,0.5)]"
                 />
                 <div className="min-w-0">
-                  <div className="text-sm font-semibold truncate">
+                  {/* 🔁 CẢ TITLE VÀ ARTIST ĐỀU DẪN TỚI TRANG NGHỆ SĨ */}
+                  <button
+                    onClick={goToArtistPage}
+                    className="text-sm font-semibold truncate text-slate-50 hover:text-cyan-300 transition cursor-pointer"
+                  >
                     {current.title}
-                  </div>
-                  <div className="text-xs text-slate-400 truncate">
+                  </button>
+                  <button
+                    onClick={goToArtistPage}
+                    className="text-xs text-slate-400 truncate hover:text-cyan-300 transition cursor-pointer"
+                  >
                     {current.artist?.name ?? "Unknown Artist"}
-                  </div>
+                  </button>
                 </div>
               </div>
 
@@ -398,7 +432,7 @@ export default function PlayerBar() {
                   <button
                     className={`${smallBtn} ${
                       shuffle
-                        ? "bg-gradient-to-br from-[#4e148c] via-[#4361ee] to-[#4cc9f0] text-white border-none"
+                        ? "bg-gradient-to-br from-[#1d4ed8] via-[#4f46e5] to-[#22d3ee] text-white border-none shadow-[0_0_15px_rgba(59,130,246,0.8)]"
                         : ""
                     }`}
                     onClick={() => setShuffle((v) => !v)}
@@ -421,8 +455,8 @@ export default function PlayerBar() {
                       w-12 h-12 flex items-center justify-center
                       rounded-full
                       text-white text-xl
-                      shadow-lg
-                      bg-gradient-to-br from-[#4e148c] via-[#4361ee] to-[#4cc9f0]
+                      shadow-[0_0_25px_rgba(56,189,248,0.9)]
+                      bg-gradient-to-br from-[#22d3ee] via-[#6366f1] to-[#a855f7]
                       hover:scale-105 hover:brightness-110
                       active:scale-95
                       transition
@@ -443,7 +477,7 @@ export default function PlayerBar() {
                   <button
                     className={`${smallBtn} ${
                       repeat !== "off"
-                        ? "bg-gradient-to-br from-[#4e148c] via-[#4361ee] to-[#4cc9f0] text-white border-none"
+                        ? "bg-gradient-to-br from-[#1d4ed8] via-[#4f46e5] to-[#22d3ee] text-white border-none shadow-[0_0_15px_rgba(59,130,246,0.8)]"
                         : ""
                     }`}
                     onClick={cycleRepeat}
@@ -459,8 +493,9 @@ export default function PlayerBar() {
                   </button>
                 </div>
 
+                {/* THANH TIẾN TRÌNH NHẠC – NEON GRADIENT */}
                 <div className="w-full flex items-center gap-3">
-                  <span className="text-[11px] text-slate-300 w-10 text-right">
+                  <span className="text-[11px] text-slate-200 w-10 text-right">
                     {fmt(time)}
                   </span>
                   <input
@@ -468,10 +503,15 @@ export default function PlayerBar() {
                     value={progress}
                     max={100}
                     step={0.1}
-                    onChange={(e) => seek(Number(e.target.value))}
-                    className="player-range flex-1 cursor-pointer"
+                    onChange={(e) => {
+                      const percent = Number(e.target.value);
+                      const newTime =
+                        (percent / 100) * (duration || 0);
+                      seek(newTime);
+                    }}
+                    className="player-range neon-range flex-1 cursor-pointer"
                   />
-                  <span className="text-[11px] text-slate-300 w-10">
+                  <span className="text-[11px] text-slate-200 w-10">
                     -{fmt(Math.max(0, duration - time))}
                   </span>
                 </div>
@@ -485,7 +525,11 @@ export default function PlayerBar() {
                     disabled={favLoading}
                     className={`
                       ${smallBtn}
-                      ${isFav ? "bg-pink-500 text-white border-none" : ""}
+                      ${
+                        isFav
+                          ? "bg-pink-500 text-white border-none shadow-[0_0_18px_rgba(236,72,153,0.9)]"
+                          : ""
+                      }
                     `}
                     title="Thêm vào yêu thích"
                   >
@@ -502,7 +546,7 @@ export default function PlayerBar() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <span className="text-[11px] text-slate-400">Âm lượng</span>
+                  <span className="text-[11px] text-slate-300">Âm lượng</span>
                   <input
                     type="range"
                     value={Math.round(volume * 100)}
@@ -510,7 +554,7 @@ export default function PlayerBar() {
                     onChange={(e) =>
                       setVolume(Number(e.target.value) / 100)
                     }
-                    className="w-28 player-range cursor-pointer"
+                    className="w-28 player-range neon-range cursor-pointer"
                   />
                 </div>
 
@@ -528,7 +572,7 @@ export default function PlayerBar() {
 
                   <button
                     onClick={handleToggleLyrics}
-                    className="text-[11px] px-2 py-1 rounded-full bg_white/5 hover:bg-white/10 border border-white/15"
+                    className="text-[11px] px-2 py-1 rounded-full bg-white/5 hover:bg-white/10 border border-white/15"
                     title="Xem lời bài hát"
                   >
                     Lời bài hát

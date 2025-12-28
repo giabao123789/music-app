@@ -1,13 +1,14 @@
-// src/playlists/playlists.module.ts
+// api/src/playlists/playlists.module.ts
 import { Module } from '@nestjs/common';
-import { PrismaModule } from '../prisma/prisma.module';
 import { PlaylistsController } from './playlists.controller';
 import { PlaylistsService } from './playlists.service';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Module({
-  imports: [PrismaModule],
+  // Không import module nào khác để tránh circular
+  imports: [],
   controllers: [PlaylistsController],
-  providers: [PlaylistsService],
+  providers: [PlaylistsService, PrismaService],
   exports: [PlaylistsService],
 })
 export class PlaylistsModule {}

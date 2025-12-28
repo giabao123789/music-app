@@ -26,15 +26,13 @@ body {
 /* ===== NAVBAR & SIDEBAR GRADIENT ===== */
 .navbar-gradient {
   background: linear-gradient(
-    to right,
-    #220440,
-    #3c0773,
-    #2713a6a3,
-    #730dda,
-    #bf3ba9
+    
+    to left,
+    
+  
+    #22d3ee, #6366f1, #a855f7,#4e148c ,#220440 
   );
 }
-
 .sidebar-gradient {
   background: linear-gradient(
     to bottom,
@@ -289,4 +287,47 @@ body {
 
 .custom-scrollbar::-webkit-scrollbar-track {
   background: transparent;
+}
+/* Thanh range dùng cho player */
+.player-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, #22d3ee, #6366f1, #a855f7);
+  outline: none;
+}
+
+/* track ẩn default */
+.player-range::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 9999px;
+  background: transparent;
+}
+.player-range::-moz-range-track {
+  height: 6px;
+  border-radius: 9999px;
+  background: transparent;
+}
+
+/* nút tròn nhỏ, sáng */
+.player-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: #e0f2fe;
+  border: 2px solid #38bdf8;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.9);
+  margin-top: -4px; /* căn giữa track */
+}
+.player-range::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: #e0f2fe;
+  border: 2px solid #38bdf8;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.9);
 }

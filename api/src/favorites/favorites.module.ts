@@ -4,16 +4,17 @@ import { FavoritesController } from './favorites.controller';
 import { FavoritesService } from './favorites.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthModule } from '../auth/auth.module';
-import { JwtModule } from '@nestjs/jwt';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Module({
-  imports: [
-    // dùng config JWT từ AuthModule (nếu AuthModule export JwtModule)
-    AuthModule,
-    // phòng trường hợp AuthModule không export JwtModule
-    JwtModule.register({}),
-  ],
+  // 👇 Import AuthModule để trong context FavoritesModule có JwtService, JwtAuthGuard
+  imports: [AuthModule],
   controllers: [FavoritesController],
-  providers: [FavoritesService, PrismaService],
+  providers: [
+    FavoritesService,
+    PrismaService,
+    JwtAuthGuard, // dùng cho @UseGuards(JwtAuthGuard) trong controller
+  ],
+  exports: [FavoritesService],
 })
 export class FavoritesModule {}

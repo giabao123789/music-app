@@ -52,27 +52,35 @@ export default function LoginPage() {
         return;
       }
 
-      // Lưu token + user vào localStorage cho phần API backend
+      // Lưu token + user vào localStorage (GIỮ NGUYÊN)
       localStorage.setItem("accessToken", data.accessToken);
       localStorage.setItem("currentUser", JSON.stringify(data.user));
 
-      // === LOGIC CHUYỂN HƯỚNG ===
+      // ✅ QUAN TRỌNG: set cookie để middleware không đá về /auth
+      const maxAge = 7 * 24 * 60 * 60; // 7 ngày
+      document.cookie = `accessToken=${encodeURIComponent(
+        data.accessToken
+      )}; Path=/; Max-Age=${maxAge}; SameSite=Lax`;
+      document.cookie = `token=${encodeURIComponent(
+        data.accessToken
+      )}; Path=/; Max-Age=${maxAge}; SameSite=Lax`;
+
+      // === LOGIC CHUYỂN HƯỚNG (GIỮ NGUYÊN) ===
       const role = data.user.role as Role;
 
-      // 1. Nếu có callbackUrl => ưu tiên dùng (ví dụ /artist/upload)
+      // 1) callbackUrl ưu tiên
       if (callbackUrl) {
-        router.push(callbackUrl);
+        router.replace(callbackUrl);
         return;
       }
 
-      // 2. Không có callbackUrl => theo role
+      // 2) theo role
       if (role === "ADMIN") {
-        router.push("/admin/users");
+        router.replace("/admin/users");
       } else if (role === "ARTIST") {
-        router.push("/artist");
+        router.replace("/artist");
       } else {
-        // USER bình thường -> về trang chủ nghe nhạc
-        router.push("/");
+        router.replace("/");
       }
     } catch (err) {
       console.error(err);
@@ -83,42 +91,105 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-[60vh] flex items-center justify-center">
-      <div className="w-full max-w-md bg-white rounded-xl shadow p-6">
-        <h1 className="text-2xl font-semibold mb-4 text-center">Đăng nhập</h1>
+    <main className="relative min-h-screen w-full overflow-hidden text-slate-100">
+      {/* Video background */}
+      <video
+        className="absolute inset-0 h-full w-full object-cover"
+        autoPlay
+        muted
+        loop
+        playsInline
+        preload="auto"
+      >
+        <source src="/videos/login.mp4" type="video/mp4" />
+      </video>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm mb-1">Email</label>
-            <input
-              type="email"
-              className="w-full border rounded px-3 py-2"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
+      {/* Overlay: PINK PASTEL NEON (nhẹ, không đậm) */}
+      <div className="absolute inset-0 bg-black/55" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_18%,rgba(255,182,213,0.22),transparent_55%),radial-gradient(circle_at_25%_85%,rgba(255,118,188,0.16),transparent_60%),radial-gradient(circle_at_80%_70%,rgba(186,230,253,0.10),transparent_60%)]" />
+
+      <div className="relative z-10 mx-auto flex min-h-screen max-w-6xl items-center justify-center px-4 py-10">
+        <div className="w-full max-w-md">
+          {/* Brand */}
+          <div className="mb-6 text-center">
+            <div className="text-xs tracking-[0.45em] text-white/60">
+             2
+            </div>
+            <div className="mt-2 text-4xl font-extrabold tracking-[0.14em] text-[#ffd1e6] drop-shadow-[0_0_24px_rgba(255,118,188,0.35)]">
+              MUSIC WEBSITE
+            </div>
+            <div className="mt-2 text-sm text-white/60">
+              Đăng nhập để vào trang chủ
+            </div>
           </div>
 
-          <div>
-            <label className="block text-sm mb-1">Mật khẩu</label>
-            <input
-              type="password"
-              className="w-full border rounded px-3 py-2"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
+          {/* Card */}
+          <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-black/30 p-6 backdrop-blur-md shadow-[0_0_70px_rgba(255,118,188,0.10)]">
+            <div className="pointer-events-none absolute inset-0 opacity-80 bg-[radial-gradient(circle_at_18%_12%,rgba(255,118,188,0.18),transparent_50%),radial-gradient(circle_at_85%_80%,rgba(255,182,213,0.10),transparent_55%)]" />
+
+            <div className="relative">
+              <h1 className="text-2xl font-semibold">Đăng nhập</h1>
+              <p className="mt-1 text-sm text-white/60">
+                Nhập thông tin tài khoản của bạn.
+              </p>
+
+              <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+                <div className="space-y-1">
+                  <label className="block text-sm text-white/70">Email</label>
+                  <input
+                    type="email"
+                    className="w-full rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-slate-100 outline-none focus:border-[#ff76bc]/60 focus:ring-2 focus:ring-[#ffb6d5]/20"
+                    placeholder="you@gmail.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-sm text-white/70">Mật khẩu</label>
+                  <input
+                    type="password"
+                    className="w-full rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-slate-100 outline-none focus:border-[#ff76bc]/60 focus:ring-2 focus:ring-[#ffb6d5]/20"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full rounded-2xl bg-gradient-to-r from-[#ffb6d5] to-[#ff76bc] px-4 py-3 text-sm font-semibold text-black hover:brightness-110 disabled:opacity-60 shadow-[0_0_28px_rgba(255,118,188,0.20)]"
+                >
+                  {loading ? "Đang đăng nhập..." : "Đăng nhập"}
+                </button>
+<div className="pt-2 text-center text-sm text-white/60">
+  <a
+    href="/forgot-password"
+    className="text-[#ffd1e6] hover:brightness-110 underline decoration-white/20"
+  >
+    Quên mật khẩu?
+  </a>
+</div>
+
+                <div className="pt-2 text-center text-sm text-white/60">
+                  Chưa có tài khoản?{" "}
+                  <a
+                    href="/register"
+                    className="text-[#ffd1e6] hover:brightness-110 underline decoration-white/20"
+                  >
+                    Đăng ký
+                  </a>
+                </div>
+              </form>
+            </div>
           </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-emerald-600 text-white rounded py-2 font-semibold hover:bg-emerald-700 disabled:opacity-60"
-          >
-            {loading ? "Đang đăng nhập..." : "Đăng nhập"}
-          </button>
-        </form>
+          <div className="mt-6 text-center text-xs text-white/40">
+            Tip: Callback URL sẽ tự quay về đúng trang bạn định vào.
+          </div>
+        </div>
       </div>
-    </div>
+    </main>
   );
 }

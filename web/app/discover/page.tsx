@@ -434,50 +434,7 @@ export default function DiscoverPage() {
         </section>
 
         {/* ARTISTS SECTION */}
-        <section>
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-white">
-              Nghệ sĩ nổi bật
-            </h2>
-          </div>
-
-          {artistsLoading ? (
-            <p className="text-xs text-slate-400">Đang tải nghệ sĩ...</p>
-          ) : artists.length === 0 ? (
-            <p className="text-xs text-slate-500">
-              Chưa có nghệ sĩ nào. Khi bạn tạo nghệ sĩ và upload nhạc, danh sách sẽ hiển thị tại đây.
-            </p>
-          ) : (
-            <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
-              {artists.slice(0, 10).map((a) => (
-                <button
-                  key={a.id}
-                  onClick={() => router.push(`/artists/${a.id}`)}
-                  className="group flex flex-col items-center gap-2 rounded-2xl border border-slate-700/70 bg-slate-950/80 p-3 text-xs text-slate-100 hover:border-cyan-400/70 hover:bg-slate-900/90"
-                >
-                  <div className="h-20 w-20 overflow-hidden rounded-full border border-cyan-400/80 bg-slate-900/80 shadow-[0_0_30px_rgba(56,189,248,0.6)]">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={
-                        a.avatar ? `${API_BASE}${a.avatar}` : "/default-artist.png"
-                      }
-                      alt={a.name}
-                      className="h-full w-full object-cover group-hover:scale-105 transition-transform"
-                    />
-                  </div>
-                  <div className="flex flex-col items-center gap-0.5">
-                    <span className="max-w-[140px] truncate text-[13px] font-semibold">
-                      {a.name}
-                    </span>
-                    <span className="text-[10px] text-slate-400">
-                      {a.tracksCount ?? 0} bài • {a.albumsCount ?? 0} album
-                    </span>
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-        </section>
+       
       </div>
     </div>
   );

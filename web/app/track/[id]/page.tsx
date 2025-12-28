@@ -1,3 +1,4 @@
+// web/app/tracks/[id]/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -5,6 +6,13 @@ import { useParams } from "next/navigation";
 import { usePlayer, Track } from "@/app/providers/PlayerProvider";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+
+function resolveMediaUrl(raw?: string | null): string {
+  if (!raw) return "";
+  if (/^https?:\/\//i.test(raw)) return raw;
+  if (raw.startsWith("/")) return `${API_BASE}${raw}`;
+  return `${API_BASE}/${raw}`;
+}
 
 type TrackDetail = Track & {
   lyrics?: string | null;
@@ -38,8 +46,16 @@ export default function TrackDetailPage() {
           setTrack(null);
           return;
         }
-        const data = await res.json();
-        setTrack(data);
+        const raw = await res.json();
+
+        // Chuẩn hoá coverUrl & audioUrl thành full URL
+        const normalized: TrackDetail = {
+          ...raw,
+          coverUrl: resolveMediaUrl(raw.coverUrl),
+          audioUrl: resolveMediaUrl(raw.audioUrl),
+        };
+
+        setTrack(normalized);
       } catch (e) {
         console.error("Fetch track detail error", e);
         setTrack(null);
@@ -61,6 +77,7 @@ export default function TrackDetailPage() {
     if (isCurrent) {
       toggle();
     } else {
+      // track đã có coverUrl & audioUrl chuẩn
       playNow(track);
     }
   };

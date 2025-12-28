@@ -1,3 +1,4 @@
+// api/src/otp/otp.service.ts
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
@@ -11,36 +12,56 @@ export class OtpService {
     private mail: MailService,
   ) {}
 
-  async issueForEmail(email: string, purpose: OtpPurpose) {
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
+  private buildMail(purpose: OtpPurpose, code: string) {
+    if (purpose === OtpPurpose.RESET_PASSWORD) {
+      return {
+        subject: 'Mã đặt lại mật khẩu',
+        text: `Mã OTP đặt lại mật khẩu của bạn là: ${code} (hết hạn sau 10 phút).`,
+      };
+    }
 
+    if (purpose === OtpPurpose.LOGIN) {
+      return {
+        subject: 'Mã đăng nhập',
+        text: `Mã OTP đăng nhập của bạn là: ${code} (hết hạn sau 10 phút).`,
+      };
+    }
+
+    // REGISTER (default)
+    return {
+      subject: 'Mã xác nhận đăng ký',
+      text: `Mã OTP của bạn là: ${code} (hết hạn sau 10 phút).`,
+    };
+  }
+
+  async issueForEmail(email: string, purpose: OtpPurpose) {
+    const cleanEmail = (email || '').trim().toLowerCase();
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = addMinutes(new Date(), 10);
 
     await this.prisma.emailOtp.create({
       data: {
-        email,
+        email: cleanEmail,
         code,
         purpose,
         expiresAt,
       },
     });
 
-    // 👇 Gửi mail: to chính là email tham số truyền vào
-    await this.mail.sendMail(
-      email,
-      'Mã xác nhận đăng ký',
-      `Mã OTP của bạn là: ${code} (hết hạn sau 10 phút).`,
-    );
+    const mail = this.buildMail(purpose, code);
+
+    await this.mail.sendMail(cleanEmail, mail.subject, mail.text);
 
     return code;
   }
 
   async validateAndUse(email: string, purpose: OtpPurpose, code: string) {
+    const cleanEmail = (email || '').trim().toLowerCase();
     const now = new Date();
 
     const otp = await this.prisma.emailOtp.findFirst({
       where: {
-        email,
+        email: cleanEmail,
         code,
         purpose,
         expiresAt: { gt: now },
@@ -50,8 +71,9 @@ export class OtpService {
 
     if (!otp) return null;
 
-    // nếu bạn không cần usedAt nữa thì bỏ luôn phần update,
-    // hoặc nếu schema có usedAt: DateTime? thì mới update
+    // ✅ one-time use: xoá OTP sau khi dùng
+    await this.prisma.emailOtp.delete({ where: { id: otp.id } }).catch(() => null);
+
     return otp;
   }
 }

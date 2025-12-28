@@ -1,61 +1,79 @@
-// src/tracks/tracks.controller.ts
-import { Controller, Get, Param, NotFoundException } from '@nestjs/common';
+// api/src/tracks/tracks.controller.ts
+import {
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
 import { TracksService } from './tracks.service';
-import { PrismaService } from '../prisma/prisma.service';
+import { Public } from '../auth/public.decorator';
 
 @Controller('tracks')
 export class TracksController {
-  constructor(
-    private readonly tracksService: TracksService,
-    private readonly prisma: PrismaService,
-  ) {}
+  constructor(private readonly tracksService: TracksService) {}
 
-  // Public: TẤT CẢ TRACK (USER nhìn thấy nhạc artist upload)
+  /**
+   * GET /tracks
+   * Danh sách bài hát public (homepage, search…)
+   * Query:
+   *  - q: search theo tên bài
+   *  - genre
+   *  - artistId
+   *  - limit
+   */
+  @Public()
   @Get()
-  findAll() {
-    return this.tracksService.findAll();
+  findAllPublic(
+    @Query('q') q?: string,
+    @Query('genre') genre?: string,
+    @Query('artistId') artistId?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const parsedLimit = limit ? Number(limit) : undefined;
+
+    return this.tracksService.findAllPublic({
+      q: q || undefined,
+      genre: genre || undefined,
+      artistId: artistId || undefined,
+      limit:
+        typeof parsedLimit === 'number' && !Number.isNaN(parsedLimit)
+          ? parsedLimit
+          : undefined,
+    });
   }
 
-  // Top 50
+  /**
+   * GET /tracks/top
+   * Top bài hát theo popularity (đã filter khoá).
+   */
+  @Public()
   @Get('top')
-  async getTopTracks() {
-    const tracks = await this.prisma.track.findMany({
-      orderBy: { popularity: 'desc' },
-      take: 50,
-      include: { artist: true, album: true },
-    });
-
-    return tracks.map((t) => ({
-      id: t.id,
-      title: t.title,
-      audioUrl: t.audioUrl,
-      coverUrl: t.coverUrl,
-      duration: t.duration,
-      lyrics: t.lyrics,
-      artist: t.artist,
-      album: t.album,
-    }));
+  findTop() {
+    return this.tracksService.findTopPublic();
   }
 
-  // Detail track
+  /**
+   * GET /tracks/:id
+   * Chi tiết 1 bài public. Nếu bài bị khoá -> 404.
+   */
+  @Public()
   @Get(':id')
-  async getTrackDetail(@Param('id') id: string) {
-    const t = await this.prisma.track.findUnique({
-      where: { id },
-      include: { artist: true, album: true },
-    });
+  findOne(@Param('id') id: string) {
+    return this.tracksService.findOnePublic(id);
+  }
 
-    if (!t) throw new NotFoundException('Track not found');
-
-    return {
-      id: t.id,
-      title: t.title,
-      audioUrl: t.audioUrl,
-      coverUrl: t.coverUrl,
-      duration: t.duration,
-      lyrics: t.lyrics,
-      artist: t.artist,
-      album: t.album,
-    };
+  /**
+   * POST /tracks/:id/play
+   * +1 lượt nghe (popularity) mỗi lần play.
+   * Để @Public() để web player không cần gửi token.
+   */
+  @Public()
+  @Post(':id/play')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async play(@Param('id') id: string) {
+    await this.tracksService.incrementPlay(id);
   }
 }

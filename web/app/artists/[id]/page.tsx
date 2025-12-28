@@ -1,3 +1,4 @@
+// web/app/artists/[id]/page.tsx
 "use client";
 
 import React, {
@@ -27,6 +28,7 @@ type ArtistTrack = {
   audioUrl: string;
   coverUrl?: string | null;
   duration?: number | null;
+  popularity?: number | null; //
   genre?: string | null;
   album?: { id: string; title: string } | null;
   artist?: { id: string; name: string | null } | null;
@@ -65,15 +67,24 @@ type FollowStatus = {
   isFollowing: boolean;
 };
 
+// Helper chuẩn hoá URL media
+function resolveMediaUrl(raw?: string | null): string {
+  if (!raw) return "";
+  if (/^https?:\/\//i.test(raw)) return raw;
+  if (raw.startsWith("/")) return `${API_BASE}${raw}`;
+  return `${API_BASE}/${raw}`;
+}
+
 /** MAP TRACK → FORMAT CHUẨN PLAYER */
 function mapToPlayerTrack(t: ArtistTrack) {
   return {
     id: t.id,
     title: t.title,
     duration: t.duration ?? 0,
-    coverUrl: t.coverUrl ? `${API_BASE}${t.coverUrl}` : "",
-    audioUrl: t.audioUrl ? `${API_BASE}${t.audioUrl}` : "",
+    coverUrl: resolveMediaUrl(t.coverUrl),
+    audioUrl: resolveMediaUrl(t.audioUrl),
     artist: { name: t.artist?.name ?? null },
+     popularity: t.popularity ?? 0,
   };
 }
 
@@ -116,9 +127,68 @@ export default function ArtistDetailPage() {
 
   const tracksSectionRef = useRef<HTMLDivElement | null>(null);
 
-  // FOLLOW
+    // FOLLOW
   const [follow, setFollow] = useState<FollowStatus | null>(null);
   const [followLoading, setFollowLoading] = useState(false);
+
+  // FOLLOWERS MODAL (artist xem danh sách người theo dõi)
+  const [followersOpen, setFollowersOpen] = useState(false);
+  const [followersLoading, setFollowersLoading] = useState(false);
+  const [followersErr, setFollowersErr] = useState<string | null>(null);
+  const [followers, setFollowers] = useState<
+    { id: string; name: string | null }[]
+  >([]);
+
+  const openFollowers = async () => {
+  const token = getTokenFromStorage();
+  if (!token) {
+    router.push("/login");
+    return;
+  }
+  if (!artist) return;
+
+  // ✅ chỉ owner hoặc admin mới xem list followers
+  if (!canEdit) return;
+
+  setFollowersOpen(true);
+  setFollowersLoading(true);
+  setFollowersErr(null);
+
+  try {
+    const url = isOwner
+      ? `${API_BASE}/artist/me/followers`
+      : `${API_BASE}/admin/artists/${artist.id}/followers`;
+
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      throw new Error(txt || "Failed to load followers");
+    }
+
+    const data = await res.json();
+
+    const list =
+      (Array.isArray(data?.items) && data.items) ||
+      (Array.isArray(data?.followers) && data.followers) ||
+      (Array.isArray(data) && data) ||
+      [];
+
+    setFollowers(list);
+  } catch (e: any) {
+    setFollowersErr(e?.message || "Failed to load followers");
+    setFollowers([]);
+  } finally {
+    setFollowersLoading(false);
+  }
+};
+
+
+  const closeFollowers = () => {
+    setFollowersOpen(false);
+  };
 
   /** LOAD CURRENT USER TỪ LOCALSTORAGE */
   useEffect(() => {
@@ -140,10 +210,25 @@ export default function ArtistDetailPage() {
   }, []);
 
   const isOwner = useMemo(() => {
-    if (!artist || !currentUser) return false;
-    if (!artist.userId) return false;
-    return artist.userId === currentUser.id;
-  }, [artist, currentUser]);
+  if (!artist || !currentUser) return false;
+  if (!artist.userId) return false;
+  return artist.userId === currentUser.id;
+}, [artist, currentUser]);
+
+const canEdit = useMemo(() => {
+  if (!currentUser) return false;
+  return isOwner || currentUser.role === "ADMIN";
+}, [isOwner, currentUser]);
+const isAdmin = useMemo(() => {
+  return currentUser?.role === "ADMIN";
+}, [currentUser]);
+
+const getProfilePatchUrl = useCallback(() => {
+  // owner => route artist/me
+  if (isOwner) return `${API_BASE}/artist/me/profile`;
+  // admin sửa artist đang xem => route admin/artists/:id
+  return `${API_BASE}/admin/artists/${artistId}`;
+}, [isOwner, artistId]);
 
   /** FETCH ARTIST DETAIL */
   const fetchArtist = useCallback(async () => {
@@ -261,7 +346,7 @@ export default function ArtistDetailPage() {
         else
           console.error(
             "Follow API error",
-            await res.text().catch(() => "")
+            await res.text().catch(() => ""),
           );
         return;
       }
@@ -295,7 +380,7 @@ export default function ArtistDetailPage() {
     if (!selectedAlbumId) return artist.tracks;
 
     return artist.tracks.filter(
-      (t) => t.album && t.album.id === selectedAlbumId
+      (t) => t.album && t.album.id === selectedAlbumId,
     );
   }, [artist, selectedAlbumId]);
 
@@ -316,7 +401,7 @@ export default function ArtistDetailPage() {
   const handlePlayAlbum = (albumId: string) => {
     if (!artist) return;
     const tracksInAlbum = artist.tracks.filter(
-      (t) => t.album && t.album.id === albumId
+      (t) => t.album && t.album.id === albumId,
     );
     if (!tracksInAlbum.length) return;
     const queue = tracksInAlbum.map(mapToPlayerTrack);
@@ -330,7 +415,7 @@ export default function ArtistDetailPage() {
 
     if (
       !confirm(
-        "Bạn có chắc muốn xoá album này? Các bài hát sẽ thành single."
+        "Bạn có chắc muốn xoá album này? Các bài hát sẽ thành single.",
       )
     )
       return;
@@ -348,22 +433,27 @@ export default function ArtistDetailPage() {
   };
 
   const handleDeleteTrack = async (trackId: string) => {
-    const token = getTokenFromStorage();
-    if (!token) return alert("Không tìm thấy token");
+  const token = getTokenFromStorage();
+  if (!token) return alert("Không tìm thấy token");
+  if (!artist) return;
+  if (!canEdit) return;
 
-    if (!confirm("Bạn có chắc muốn xoá bài này?")) return;
+  if (!confirm("Bạn có chắc muốn xoá bài này?")) return;
 
-    const res = await fetch(`${API_BASE}/artist/me/tracks/${trackId}`, {
-      method: "DELETE",
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
+  const url = isOwner
+    ? `${API_BASE}/artist/me/tracks/${trackId}`
+    : `${API_BASE}/admin/tracks/${trackId}`;
 
-    if (!res.ok) return alert("Xoá bài hát thất bại!");
+  const res = await fetch(url, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
 
-    await fetchArtist();
-  };
+  if (!res.ok) return alert("Xoá bài hát thất bại!");
+  await fetchArtist();
+};
 
   /** LỌC THEO ALBUM & SCROLL XUỐNG LIST TRACK */
   const handleFilterAlbum = (albumId: string) => {
@@ -376,98 +466,108 @@ export default function ArtistDetailPage() {
   };
 
   /** UPDATE PROFILE (NAME, BIO, AVATAR) */
-  const handleSaveProfile = async () => {
-    if (!artist) return;
-    const token = getTokenFromStorage();
-    if (!token) {
-      setProfileErr("Không tìm thấy token. Vui lòng đăng nhập lại.");
-      return;
+  /** UPDATE PROFILE (NAME, BIO, AVATAR) */
+const handleSaveProfile = async () => {
+  if (!artist) return;
+
+  const token = getTokenFromStorage();
+  if (!token) {
+    setProfileErr("Không tìm thấy token. Vui lòng đăng nhập lại.");
+    return;
+  }
+
+  try {
+    setSavingProfile(true);
+    setProfileErr(null);
+    setProfileMsg(null);
+
+    const url = getProfilePatchUrl();
+
+    const res = await fetch(url, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        name: displayName,
+        bio,
+      }),
+    });
+
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      throw new Error(txt || "Cập nhật hồ sơ thất bại");
     }
 
-    try {
-      setSavingProfile(true);
-      setProfileErr(null);
-      setProfileMsg(null);
+    setProfileMsg("Đã lưu thay đổi ✨");
+    fetchArtist();
+  } catch (e: any) {
+    setProfileErr(e?.message || "Có lỗi khi lưu hồ sơ");
+  } finally {
+    setSavingProfile(false);
+  }
+};
 
-      const res = await fetch(`${API_BASE}/artist/me/profile`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          name: displayName,
-          bio,
-        }),
-      });
 
-      if (!res.ok) {
-        const txt = await res.text().catch(() => "");
-        throw new Error(txt || "Cập nhật hồ sơ thất bại");
-      }
-
-      setProfileMsg("Đã lưu thay đổi ✨");
-      fetchArtist();
-    } catch (e: any) {
-      setProfileErr(e.message || "Có lỗi khi lưu hồ sơ");
-    } finally {
-      setSavingProfile(false);
-    }
-  };
 
   const handleChangeAvatar = async (file: File) => {
-    const token = getTokenFromStorage();
-    if (!token) {
-      setProfileErr("Không tìm thấy token. Vui lòng đăng nhập lại.");
-      return;
+  const token = getTokenFromStorage();
+  if (!token) {
+    setProfileErr("Không tìm thấy token. Vui lòng đăng nhập lại.");
+    return;
+  }
+
+  try {
+    setSavingProfile(true);
+    setProfileErr(null);
+    setProfileMsg(null);
+
+    // 1) upload file -> backend trả url
+    const fd = new FormData();
+    fd.append("file", file);
+
+    const up = await fetch(`${API_BASE}/artist/me/upload-cover`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: fd,
+    });
+
+    if (!up.ok) {
+      const txt = await up.text().catch(() => "");
+      throw new Error(txt || "Upload avatar thất bại");
     }
 
-    try {
-      setSavingProfile(true);
-      setProfileErr(null);
-      setProfileMsg(null);
+    const json = await up.json();
+    const avatarUrl = json?.url;
+    if (!avatarUrl) throw new Error("Upload avatar xong nhưng thiếu url trả về");
 
-      const fd = new FormData();
-      fd.append("file", file);
+    // 2) lưu url vào artist (owner dùng /artist/me/profile, admin dùng /admin/artists/:id)
+    const patchUrl = getProfilePatchUrl();
 
-      const up = await fetch(`${API_BASE}/artist/me/upload-cover`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body: fd,
-      });
+    const res = await fetch(patchUrl, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ avatar: avatarUrl }),
+    });
 
-      if (!up.ok) {
-        const txt = await up.text().catch(() => "");
-        throw new Error(txt || "Upload avatar thất bại");
-      }
-
-      const json = await up.json();
-      const avatarUrl = json.url;
-
-      const res = await fetch(`${API_BASE}/artist/me/profile`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          avatar: avatarUrl,
-        }),
-      });
-
-      if (!res.ok) {
-        const txt = await res.text().catch(() => "");
-        throw new Error(txt || "Cập nhật avatar thất bại");
-      }
-
-      setProfileMsg("Đã cập nhật avatar 🎧");
-      fetchArtist();
-    } catch (e: any) {
-      setProfileErr(e.message || "Có lỗi khi cập nhật avatar");
-    } finally {
-      setSavingProfile(false);
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      throw new Error(txt || "Cập nhật avatar thất bại");
     }
-  };
+
+    setProfileMsg("Đã cập nhật avatar 🎧");
+    fetchArtist();
+  } catch (e: any) {
+    setProfileErr(e?.message || "Có lỗi khi cập nhật avatar");
+  } finally {
+    setSavingProfile(false);
+  }
+};
+
 
   /* ===================== UI RENDER ===================== */
 
@@ -512,7 +612,7 @@ export default function ArtistDetailPage() {
             {artist.avatar ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={`${API_BASE}${artist.avatar}`}
+                src={resolveMediaUrl(artist.avatar)}
                 className="h-full w-full object-cover"
                 alt={artist.name}
               />
@@ -532,10 +632,14 @@ export default function ArtistDetailPage() {
               <span className="rounded-full bg-slate-900/70 px-3 py-1 text-xs">
                 {artist.tracksCount} bài hát
               </span>
-              <span className="rounded-full bg-slate-900/70 px-3 py-1 text-xs">
-                {(follow?.followersCount ?? 0).toLocaleString("vi-VN")} người
-                theo dõi
-              </span>
+              <button
+  onClick={openFollowers}
+  className="rounded-full bg-slate-900/70 px-3 py-1 text-xs hover:bg-slate-800"
+  title="Xem người theo dõi"
+>
+  {(follow?.followersCount ?? 0).toLocaleString("vi-VN")} người theo dõi
+</button>
+
             </div>
 
             <div className="mt-3 flex flex-wrap gap-3">
@@ -545,8 +649,48 @@ export default function ArtistDetailPage() {
               >
                 ▶ Phát tất cả
               </button>
+{followersOpen && (
+  <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4">
+    <div className="w-full max-w-md rounded-2xl border border-cyan-400/30 bg-slate-950/95 p-4 shadow-[0_0_40px_rgba(56,189,248,0.25)]">
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-sm font-semibold text-cyan-200">
+          Người theo dõi
+        </div>
+        <button
+          onClick={() => setFollowersOpen(false)}
+          className="rounded-full border border-slate-600/70 bg-slate-900/70 px-3 py-1 text-xs text-slate-200 hover:border-cyan-400 hover:text-cyan-200"
+        >
+          Đóng
+        </button>
+      </div>
 
-              {!isOwner && (
+      <div className="mt-3">
+        {followersLoading ? (
+          <div className="text-xs text-cyan-200/70">Đang tải...</div>
+        ) : followersErr ? (
+          <div className="text-xs text-red-300">{followersErr}</div>
+        ) : followers.length ? (
+          <div className="max-h-[50vh] overflow-auto space-y-2 pr-1">
+            {followers.map((f) => (
+              <div
+                key={f.id}
+                className="rounded-xl border border-slate-700/60 bg-slate-900/60 px-3 py-2 text-sm text-slate-100"
+              >
+                {f.name || "(Không tên)"}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-xs text-slate-400">
+            Chưa có người theo dõi.
+          </div>
+        )}
+      </div>
+    </div>
+  </div>
+)}
+
+              {!canEdit && (
                 <button
                   onClick={handleToggleFollow}
                   disabled={followLoading}
@@ -574,7 +718,7 @@ export default function ArtistDetailPage() {
         </div>
 
         {/* OWNER EDIT PANEL */}
-        {isOwner && (
+        {canEdit && (
           <section className="mx-6 mb-4 rounded-3xl border border-cyan-400/40 bg-gradient-to-r from-slate-950/80 via-slate-900/90 to-sky-950/80 p-4 text-xs shadow-[0_0_40px_rgba(56,189,248,0.4)]">
             <div className="mb-3 flex items-center justify-between gap-2">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-cyan-300">
@@ -713,7 +857,7 @@ export default function ArtistDetailPage() {
                           {album.coverUrl ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img
-                              src={`${API_BASE}${album.coverUrl}`}
+                              src={resolveMediaUrl(album.coverUrl)}
                               alt={album.title}
                               className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                             />
@@ -754,7 +898,7 @@ export default function ArtistDetailPage() {
                             : "Xem bài trong album"}
                         </button>
 
-                        {isOwner && (
+                        {canEdit && (
                           <button
                             onClick={() => handleDeleteAlbum(album.id)}
                             className="rounded-full border border-red-500/70 bg-red-500/10 px-3 py-1.5 text-[11px] font-medium text-red-200 hover:bg-red-500/20"
@@ -800,26 +944,42 @@ export default function ArtistDetailPage() {
               )}
             </div>
 
-            {visibleTracks.length ? (
-              visibleTracks.map((track) => (
-                <div key={track.id} className="relative">
-                  <TrackCard track={mapToPlayerTrack(track)} />
+          {visibleTracks.length ? (
+  visibleTracks.map((track) => (
+    <div
+  key={track.id}
+  className="flex items-start gap-3"
+>
+  {/* TrackCard chiếm toàn bộ chiều ngang còn lại */}
+  <div className="flex-1">
+    <TrackCard track={mapToPlayerTrack(track)} />
+  </div>
 
-                  {isOwner && (
-                    <button
-                      onClick={() => handleDeleteTrack(track.id)}
-                      className="absolute right-4 top-3 rounded-full border border-red-400 bg-red-500/20 px-3 py-1 text-xs text-red-200 hover:bg-red-500/30"
-                    >
-                      Xoá
-                    </button>
-                  )}
-                </div>
-              ))
-            ) : (
-              <p className="text-sm text-slate-500">
-                Nghệ sĩ chưa có bài hát nào.
-              </p>
-            )}
+  {canEdit && (
+    <div className="mt-3 flex flex-col gap-2 shrink-0">
+      <button
+        onClick={() => router.push(`/artist/tracks/${track.id}/edit`)}
+        className="rounded-full border border-cyan-400 bg-cyan-500/20 px-3 py-1 text-xs font-medium text-cyan-100 shadow-sm hover:bg-cyan-500/30 hover:text-white"
+      >
+        ✏ Sửa
+      </button>
+
+      <button
+        onClick={() => handleDeleteTrack(track.id)}
+        className="rounded-full border border-red-400 bg-red-500/20 px-3 py-1 text-xs font-medium text-red-200 hover:bg-red-500/30"
+      >
+        Xoá
+      </button>
+    </div>
+  )}
+</div>
+  ))
+) : (
+  <p className="text-sm text-slate-500">
+    Nghệ sĩ chưa có bài hát nào.
+  </p>
+)}
+
           </section>
 
           {/* SUGGEST ARTISTS */}
@@ -839,7 +999,7 @@ export default function ArtistDetailPage() {
                       {a.avatar ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
-                          src={`${API_BASE}${a.avatar}`}
+                          src={resolveMediaUrl(a.avatar)}
                           className="h-full w-full object-cover transition group-hover:scale-105"
                           alt={a.name}
                         />

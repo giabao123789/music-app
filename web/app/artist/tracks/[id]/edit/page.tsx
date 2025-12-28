@@ -21,6 +21,7 @@ type ArtistTrack = {
   duration?: number | null;
   lyrics?: string | null;
   album?: { id: string; title: string | null } | null;
+  artistId?: string | null; // để admin biết track thuộc artist nào (nếu API trả)
 };
 
 type ArtistAlbum = {
@@ -40,12 +41,23 @@ function getTokenFromStorage() {
   );
 }
 
+function resolveUrlMaybe(raw?: string | null) {
+  if (!raw) return "";
+  // nếu đã là http(s) thì giữ nguyên
+  if (/^https?:\/\//i.test(raw)) return raw;
+  // nếu là /uploads/... thì ghép API_BASE
+  if (raw.startsWith("/")) return `${API_BASE}${raw}`;
+  return `${API_BASE}/${raw}`;
+}
+
 export default function EditTrackPage() {
   const params = useParams();
   const router = useRouter();
   const trackId = params?.id as string;
 
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+
+  const isAdmin = useMemo(() => currentUser?.role === "ADMIN", [currentUser]);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -60,15 +72,19 @@ export default function EditTrackPage() {
   const [duration, setDuration] = useState<string>("");
   const [lyrics, setLyrics] = useState("");
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
+
+  // ✅ NEW: audio state
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+
   const [msg, setMsg] = useState<string | null>(null);
 
   /* === Lấy currentUser từ localStorage === */
   useEffect(() => {
     if (typeof window === "undefined") return;
+
     const raw =
-      localStorage.getItem("currentUser") ||
-      localStorage.getItem("user") ||
-      null;
+      localStorage.getItem("currentUser") || localStorage.getItem("user") || null;
+
     if (!raw) {
       router.push("/login");
       return;
@@ -77,7 +93,9 @@ export default function EditTrackPage() {
     try {
       const parsed = JSON.parse(raw) as CurrentUser;
       setCurrentUser(parsed);
-      if (parsed.role !== "ARTIST") {
+
+      // chỉ cho ARTIST hoặc ADMIN vào trang này
+      if (parsed.role !== "ARTIST" && parsed.role !== "ADMIN") {
         router.push("/");
       }
     } catch {
@@ -89,6 +107,7 @@ export default function EditTrackPage() {
   useEffect(() => {
     const token = getTokenFromStorage();
     if (!token || !trackId) return;
+    if (!currentUser) return;
 
     let cancelled = false;
 
@@ -96,73 +115,110 @@ export default function EditTrackPage() {
       try {
         setLoading(true);
         setError(null);
+        setMsg(null);
 
-        // 1. Lấy toàn bộ track của nghệ sĩ
-        const tracksRes = await fetch(`${API_BASE}/artist/me/tracks`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
+        let target: ArtistTrack | null = null;
 
-        if (!tracksRes.ok) {
-          const txt = await tracksRes.text().catch(() => "");
-          console.error("/artist/me/tracks error", txt);
-          throw new Error("Không thể tải danh sách bài hát.");
-        }
+        if (currentUser.role === "ADMIN") {
+          // ✅ ADMIN: lấy track theo id trực tiếp
+          const res = await fetch(`${API_BASE}/admin/tracks/${trackId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
 
-        const tracksJson = await tracksRes.json();
-        const list: ArtistTrack[] = (tracksJson || []).map((t: any) => ({
-          id: t.id,
-          title: t.title,
-          audioUrl: t.audioUrl,
-          coverUrl: t.coverUrl,
-          duration: t.duration,
-          lyrics: t.lyrics ?? null,
-          album: t.album
-            ? { id: t.album.id, title: t.album.title }
-            : null,
-        }));
+          if (!res.ok) {
+            const txt = await res.text().catch(() => "");
+            console.error("/admin/tracks/:id error", txt);
+            throw new Error("Không thể tải bài hát (admin).");
+          }
 
-        const target = list.find((t) => t.id === trackId);
-        if (!target) {
-          throw new Error("Không tìm thấy bài hát của bạn với ID này.");
-        }
+          const t: any = await res.json();
+          target = {
+            id: t.id,
+            title: t.title,
+            audioUrl: t.audioUrl,
+            coverUrl: t.coverUrl ?? null,
+            duration: typeof t.duration === "number" ? t.duration : null,
+            lyrics: t.lyrics ?? null,
+            album: t.album ? { id: t.album.id, title: t.album.title } : null,
+            artistId: t.artistId ?? null,
+          };
 
-        // 2. Lấy danh sách album của nghệ sĩ
-        const albumsRes = await fetch(`${API_BASE}/artist/me/albums`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+          // ADMIN: danh sách album safe (giữ như cũ)
+          const safeAlbums: ArtistAlbum[] = [];
+          if (target.album?.id) {
+            safeAlbums.push({
+              id: target.album.id,
+              title: target.album.title ?? "(Album)",
+              coverUrl: null,
+            });
+          }
+          if (!cancelled) setAlbums(safeAlbums);
+        } else {
+          // ✅ ARTIST: giữ logic cũ
+          const tracksRes = await fetch(`${API_BASE}/artist/me/tracks`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
 
-        let albumsJson: any[] = [];
-        if (albumsRes.ok) {
-          albumsJson = (await albumsRes.json()) || [];
+          if (!tracksRes.ok) {
+            const txt = await tracksRes.text().catch(() => "");
+            console.error("/artist/me/tracks error", txt);
+            throw new Error("Không thể tải danh sách bài hát.");
+          }
+
+          const tracksJson = await tracksRes.json();
+          const list: ArtistTrack[] = (tracksJson || []).map((t: any) => ({
+            id: t.id,
+            title: t.title,
+            audioUrl: t.audioUrl,
+            coverUrl: t.coverUrl,
+            duration: t.duration,
+            lyrics: t.lyrics ?? null,
+            album: t.album ? { id: t.album.id, title: t.album.title } : null,
+          }));
+
+          target = list.find((t) => t.id === trackId) || null;
+          if (!target) throw new Error("Không tìm thấy bài hát của bạn với ID này.");
+
+          // albums của artist
+          const albumsRes = await fetch(`${API_BASE}/artist/me/albums`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+
+          let albumsJson: any[] = [];
+          if (albumsRes.ok) albumsJson = (await albumsRes.json()) || [];
+
+          if (!cancelled) {
+            setAlbums(
+              albumsJson.map((a: any) => ({
+                id: a.id,
+                title: a.title,
+                coverUrl: a.coverUrl ?? null,
+              })),
+            );
+          }
         }
 
         if (cancelled) return;
+        if (!target) throw new Error("Không tìm thấy bài hát");
 
         setTrack(target);
-        setAlbums(
-          albumsJson.map((a: any) => ({
-            id: a.id,
-            title: a.title,
-            coverUrl: a.coverUrl ?? null,
-          }))
-        );
 
         // set form value từ track
-        setTitle(target.title);
+        setTitle(target.title || "");
         setAlbumId(target.album?.id ?? "");
         setDuration(
           typeof target.duration === "number" && Number.isFinite(target.duration)
             ? String(target.duration)
-            : ""
+            : "",
         );
         setLyrics(target.lyrics ?? "");
         setCoverUrl(target.coverUrl ?? null);
+
+        // ✅ NEW: init audioUrl
+        setAudioUrl(target.audioUrl ?? null);
       } catch (e: any) {
         console.error("fetch track edit error", e);
-        if (!cancelled)
-          setError(e.message || "Không thể tải dữ liệu bài hát.");
+        if (!cancelled) setError(e?.message || "Không thể tải dữ liệu bài hát.");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -172,7 +228,7 @@ export default function EditTrackPage() {
     return () => {
       cancelled = true;
     };
-  }, [trackId]);
+  }, [trackId, currentUser]);
 
   const isSingle = useMemo(() => !albumId, [albumId]);
 
@@ -193,9 +249,7 @@ export default function EditTrackPage() {
 
       const up = await fetch(`${API_BASE}/artist/me/upload-cover`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
         body: fd,
       });
 
@@ -218,9 +272,8 @@ export default function EditTrackPage() {
     }
   };
 
-  /* === Submit lưu thay đổi === */
-  const handleSave = async () => {
-    if (!track) return;
+  /* === ✅ NEW: Upload audio mới === */
+  const handleUploadAudio = async (file: File) => {
     const token = getTokenFromStorage();
     if (!token) {
       alert("Không tìm thấy token. Vui lòng đăng nhập lại.");
@@ -231,6 +284,80 @@ export default function EditTrackPage() {
       setSaving(true);
       setMsg(null);
 
+      const fd = new FormData();
+      fd.append("file", file);
+
+      const up = await fetch(`${API_BASE}/artist/me/upload-audio`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
+      });
+
+      if (!up.ok) {
+        const txt = await up.text().catch(() => "");
+        console.error("upload-audio error", txt);
+        alert("Upload audio thất bại.");
+        return;
+      }
+
+      const json = await up.json();
+      const url = json.url as string;
+
+      setAudioUrl(url);
+      setMsg("Đã upload audio mới (chưa lưu). Nhấn Lưu thay đổi để áp dụng.");
+    } catch (e) {
+      console.error("handleUploadAudio error", e);
+      alert("Có lỗi khi upload audio.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /* === Submit lưu thay đổi === */
+  const handleSave = async () => {
+    if (!track) return;
+
+    const token = getTokenFromStorage();
+    if (!token) {
+      alert("Không tìm thấy token. Vui lòng đăng nhập lại.");
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setMsg(null);
+
+      if (isAdmin) {
+        // ✅ ADMIN: gửi field mà admin controller đang nhận
+        const body: any = {};
+        if (title.trim()) body.title = title.trim();
+        body.albumId = albumId ? albumId : null;
+        if (coverUrl) body.coverUrl = coverUrl;
+
+        // ✅ NEW: audioUrl
+        if (audioUrl) body.audioUrl = audioUrl;
+
+        const res = await fetch(`${API_BASE}/admin/tracks/${trackId}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(body),
+        });
+
+        if (!res.ok) {
+          const txt = await res.text().catch(() => "");
+          console.error("admin update track error", txt);
+          alert("Lưu thay đổi thất bại (admin).");
+          return;
+        }
+
+        setMsg("Đã lưu thay đổi bài hát ✨");
+        return;
+      }
+
+      // ✅ ARTIST: giữ logic đầy đủ như cũ + thêm audioUrl
       const body: any = {
         title: title.trim(),
         albumId: albumId || null,
@@ -238,13 +365,11 @@ export default function EditTrackPage() {
       };
 
       const d = parseInt(duration, 10);
-      if (!Number.isNaN(d) && d >= 0) {
-        body.duration = d;
-      }
+      if (!Number.isNaN(d) && d >= 0) body.duration = d;
+      if (coverUrl) body.coverUrl = coverUrl;
 
-      if (coverUrl) {
-        body.coverUrl = coverUrl;
-      }
+      // ✅ NEW: audioUrl
+      if (audioUrl) body.audioUrl = audioUrl;
 
       const res = await fetch(`${API_BASE}/artist/me/tracks/${track.id}`, {
         method: "PATCH",
@@ -257,7 +382,7 @@ export default function EditTrackPage() {
 
       if (!res.ok) {
         const txt = await res.text().catch(() => "");
-        console.error("update track error", txt);
+        console.error("artist update track error", txt);
         alert("Lưu thay đổi thất bại.");
         return;
       }
@@ -292,9 +417,7 @@ export default function EditTrackPage() {
   if (error || !track) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
-        <p className="text-sm text-red-400">
-          {error || "Không tìm thấy bài hát"}
-        </p>
+        <p className="text-sm text-red-400">{error || "Không tìm thấy bài hát"}</p>
         <button
           onClick={() => router.back()}
           className="rounded-full bg-slate-900/80 px-4 py-2 text-xs text-slate-100 shadow hover:bg-slate-800"
@@ -317,7 +440,7 @@ export default function EditTrackPage() {
         <header className="mb-6 flex flex-col gap-3 md:mb-8 md:flex-row md:items-end md:justify-between">
           <div>
             <p className="text-[11px] uppercase tracking-wide text-cyan-300/80">
-              Artist • Edit Track
+              {isAdmin ? "Admin" : "Artist"} • Edit Track
             </p>
             <h1 className="text-2xl font-extrabold tracking-tight text-white drop-shadow-[0_0_24px_rgba(56,189,248,0.7)]">
               Chỉnh sửa bài hát
@@ -388,48 +511,53 @@ export default function EditTrackPage() {
                 {isSingle
                   ? "Bài hát sẽ được xem là single."
                   : "Bài hát sẽ thuộc về album đã chọn."}
+                {isAdmin &&
+                  " (Admin: danh sách album có thể chỉ hiện album hiện tại nếu thiếu API.)"}
               </p>
             </div>
 
-            {/* Duration */}
-            <div>
-              <label className="mb-1 block text-[11px] font-semibold text-slate-100">
-                Thời lượng (giây)
-              </label>
-              <input
-                type="number"
-                min={0}
-                value={duration}
-                onChange={(e) => setDuration(e.target.value)}
-                className="w-40 rounded-lg border border-cyan-500/40 bg-slate-900/70 px-3 py-2 text-sm text-slate-50 outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/70"
-                placeholder="VD: 180"
-              />
-              <p className="mt-1 text-[11px] text-slate-400">
-                Có thể để trống, hệ thống sẽ giữ giá trị cũ.
-              </p>
-            </div>
+            {/* Duration + Lyrics: chỉ ARTIST mới chỉnh */}
+            {!isAdmin && (
+              <>
+                <div>
+                  <label className="mb-1 block text-[11px] font-semibold text-slate-100">
+                    Thời lượng (giây)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={duration}
+                    onChange={(e) => setDuration(e.target.value)}
+                    className="w-40 rounded-lg border border-cyan-500/40 bg-slate-900/70 px-3 py-2 text-sm text-slate-50 outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/70"
+                    placeholder="VD: 180"
+                  />
+                  <p className="mt-1 text-[11px] text-slate-400">
+                    Có thể để trống, hệ thống sẽ giữ giá trị cũ.
+                  </p>
+                </div>
 
-            {/* Lyrics */}
-            <div>
-              <label className="mb-1 block text-[11px] font-semibold text-slate-100">
-                Lời bài hát (lyrics)
-              </label>
-              <textarea
-                value={lyrics}
-                onChange={(e) => setLyrics(e.target.value)}
-                rows={8}
-                className="w-full rounded-xl border border-cyan-500/40 bg-slate-900/70 px-3 py-2 text-sm text-slate-50 outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/70"
-                placeholder="Nhập lời bài hát..."
-              />
-              <p className="mt-1 text-[11px] text-slate-400">
-                Có thể bỏ trống nếu bạn chưa muốn thêm lời.
-              </p>
-            </div>
+                <div>
+                  <label className="mb-1 block text-[11px] font-semibold text-slate-100">
+                    Lời bài hát (lyrics)
+                  </label>
+                  <textarea
+                    value={lyrics}
+                    onChange={(e) => setLyrics(e.target.value)}
+                    rows={8}
+                    className="w-full rounded-xl border border-cyan-500/40 bg-slate-900/70 px-3 py-2 text-sm text-slate-50 outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/70"
+                    placeholder="Nhập lời bài hát..."
+                  />
+                  <p className="mt-1 text-[11px] text-slate-400">
+                    Có thể bỏ trống nếu bạn chưa muốn thêm lời.
+                  </p>
+                </div>
+              </>
+            )}
           </section>
 
           {/* RIGHT: COVER + META */}
           <section className="space-y-4 rounded-3xl border border-cyan-500/40 bg-gradient-to-br from-slate-950/90 via-slate-900/90 to-sky-950/80 p-4 shadow-[0_0_40px_rgba(56,189,248,0.4)]">
-            {/* Cover preview */}
+            {/* COVER */}
             <div>
               <label className="mb-1 block text-[11px] font-semibold text-slate-100">
                 Ảnh bìa bài hát
@@ -440,9 +568,9 @@ export default function EditTrackPage() {
                   <img
                     src={
                       coverUrl
-                        ? `${API_BASE}${coverUrl}`
+                        ? resolveUrlMaybe(coverUrl)
                         : track.coverUrl
-                        ? `${API_BASE}${track.coverUrl}`
+                        ? resolveUrlMaybe(track.coverUrl)
                         : "/default-cover.jpg"
                     }
                     alt={title}
@@ -452,12 +580,9 @@ export default function EditTrackPage() {
 
                 <div className="flex-1 text-[11px] text-slate-300">
                   <p className="mb-2">
-                    Chọn một ảnh mới để thay đổi cover bài hát. Ảnh mới sẽ được
-                    upload lên server và lưu lại khi bạn nhấn{" "}
-                    <span className="font-semibold text-cyan-200">
-                      “Lưu thay đổi”
-                    </span>
-                    .
+                    Chọn ảnh mới để thay cover. Ảnh sẽ upload lên server và áp dụng
+                    khi bạn nhấn{" "}
+                    <span className="font-semibold text-cyan-200">“Lưu thay đổi”</span>.
                   </p>
                   <input
                     type="file"
@@ -472,7 +597,45 @@ export default function EditTrackPage() {
               </div>
             </div>
 
-            {/* Info box */}
+            {/* ✅ NEW: AUDIO */}
+            <div>
+              <label className="mb-1 block text-[11px] font-semibold text-slate-100">
+                Audio bài hát
+              </label>
+
+              <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-3">
+                <div className="text-[11px] text-slate-300 mb-2">
+                  Upload file audio mới (mp3, wav...). File sẽ upload lên server và chỉ áp dụng khi bạn nhấn{" "}
+                  <span className="font-semibold text-cyan-200">“Lưu thay đổi”</span>.
+                </div>
+
+                <audio
+                  controls
+                  className="w-full"
+                  src={resolveUrlMaybe(audioUrl || track.audioUrl)}
+                />
+
+                <div className="mt-2">
+                  <input
+                    type="file"
+                    accept="audio/*"
+                    className="block w-full cursor-pointer text-[11px] text-slate-200 file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-indigo-600 file:px-3 file:py-1.5 file:text-[11px] file:font-semibold file:text-slate-50 hover:file:bg-indigo-500"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleUploadAudio(file);
+                    }}
+                  />
+                  <div className="mt-1 text-[10px] text-slate-400 break-all">
+                    URL hiện tại:{" "}
+                    <span className="text-slate-200">
+                      {(audioUrl || track.audioUrl) ? (audioUrl || track.audioUrl) : "—"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* META */}
             <div className="rounded-2xl border border-slate-700/60 bg-slate-950/80 p-3 text-[11px] text-slate-300">
               <div className="mb-1 text-[11px] uppercase tracking-wide text-slate-400">
                 Thông tin hiện tại
@@ -480,7 +643,7 @@ export default function EditTrackPage() {
               <ul className="space-y-1">
                 <li>
                   <span className="text-slate-400">ID: </span>
-                  <span className="text-slate-100 font-mono text-[10px]">
+                  <span className="font-mono text-[10px] text-slate-100">
                     {track.id}
                   </span>
                 </li>
@@ -495,7 +658,7 @@ export default function EditTrackPage() {
                   <span className="text-slate-100">
                     {typeof track.duration === "number"
                       ? `${Math.floor(track.duration / 60)}:${String(
-                          track.duration % 60
+                          track.duration % 60,
                         ).padStart(2, "0")}`
                       : "Chưa có"}
                   </span>

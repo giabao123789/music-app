@@ -1,12 +1,14 @@
-// src/main.ts
+// api/src/main.ts
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { join } from 'path';
+import { NestExpressApplication } from '@nestjs/platform-express';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // ✅ giữ nguyên: chỉ thêm type NestExpressApplication để dùng static assets chắc chắn
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
-  // CORS cho frontend Next.js
+  // ✅ giữ nguyên CORS cho frontend Next.js
   app.enableCors({
     origin: 'http://localhost:3000', // URL frontend
     credentials: true,
@@ -15,10 +17,25 @@ async function bootstrap() {
       'Origin, X-Requested-With, Content-Type, Accept, Authorization',
   });
 
-  // Serve file tĩnh: audio, ảnh upload
+  // ✅ GIỮ NGUYÊN: Serve file tĩnh upload (audio, images...)
   // => http://localhost:3001/uploads/...
   app.useStaticAssets(join(__dirname, '..', 'uploads'), {
     prefix: '/uploads',
+    setHeaders: (res) => {
+      // giúp audio load/seek ổn định
+      res.setHeader('Accept-Ranges', 'bytes');
+    },
+  });
+
+  // ✅ THÊM MỚI: Serve nhạc "track data / seed" từ web/public/music
+  // => http://localhost:3001/music/...
+  // process.cwd() khi chạy API thường là thư mục: music-app/api
+  // nên ../web/public/music là đúng cấu trúc bạn chụp màn hình
+  app.useStaticAssets(join(process.cwd(), '..', 'web', 'public', 'music'), {
+    prefix: '/music',
+    setHeaders: (res) => {
+      res.setHeader('Accept-Ranges', 'bytes');
+    },
   });
 
   app.useLogger(['error', 'warn', 'debug', 'verbose', 'log']);
@@ -29,3 +46,4 @@ async function bootstrap() {
   );
 }
 bootstrap();
+console.log('DATABASE_URL =', process.env.DATABASE_URL);

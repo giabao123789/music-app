@@ -11,6 +11,8 @@ import React, {
   useCallback,
 } from "react";
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+
 export type Track = {
   id: string;
   title: string;
@@ -19,6 +21,8 @@ export type Track = {
   audioUrl: string;
   lyrics?: string | null; // để PlayerBar có thể cache lời bài hát
   artist?: { name: string | null } | null;
+  popularity?: number | null;
+  genre?: string | null;
 };
 
 type Ctx = {
@@ -29,6 +33,9 @@ type Ctx = {
   current?: Track;
   playing: boolean;
   toggle: () => void;
+  playNow: (t: Track) => void;
+  addToQueue: (t: Track) => void;
+  clearQueue: () => void;
   next: () => void;
   prev: () => void;
   time: number;
@@ -36,31 +43,43 @@ type Ctx = {
   seek: (pct: number) => void;
   volume: number;
   setVolume: (v: number) => void;
-  addToQueue: (t: Track) => void;
-  clearQueue: () => void;
-  playNow: (t: Track) => void;
 };
 
 const PlayerCtx = createContext<Ctx | null>(null);
 
 export const usePlayer = () => {
-  const v = useContext(PlayerCtx);
-  if (!v) throw new Error("usePlayer must be used inside PlayerProvider");
-  return v;
+  const ctx = useContext(PlayerCtx);
+  if (!ctx) throw new Error("usePlayer must be used inside PlayerProvider");
+  return ctx;
 };
 
+// localStorage keys
 const LS_QUEUE = "mp:queue";
 const LS_INDEX = "mp:index";
 const LS_VOL = "mp:vol";
 const LS_PLAYING = "mp:playing";
-const LS_LAST = "mp:last"; // nhớ vị trí đang nghe
-const LS_RECENT = "mp:recent"; // lịch sử nghe
+const LS_LAST = "mp:last";
+const LS_RECENT = "mp:recent";
+
+function resolveMediaUrl(raw?: string | null): string {
+  if (!raw) return "";
+  if (/^https?:\/\//i.test(raw)) return raw;
+
+  // raw có thể là "/uploads/..." hoặc "uploads/..."
+  if (raw.startsWith("/")) return `${API_BASE}${raw}`;
+  return `${API_BASE}/${raw}`;
+}
 
 export default function PlayerProvider({ children }: { children: React.ReactNode }) {
   const audio = useRef<HTMLAudioElement | null>(null);
   const lastPersistRef = useRef<number>(0);
 
-  // ===== STATE =====
+  // ===== Realtime lượt nghe: chỉ +1 khi nghe > 50% duration =====
+  const currentRef = useRef<Track | undefined>(undefined);
+  const queueRef = useRef<Track[]>([]);
+  const countedRef = useRef<boolean>(false);
+  const countedTrackIdRef = useRef<string | null>(null);
+
   const [queue, setQueue] = useState<Track[]>(() => {
     if (typeof window === "undefined") return [];
     try {
@@ -69,6 +88,32 @@ export default function PlayerProvider({ children }: { children: React.ReactNode
       return [];
     }
   });
+
+  // ===== Gọi API tăng lượt nghe (popularity) =====
+  const bumpPopularity = useCallback(
+    (trackId: string) => {
+      // fire-and-forget, không chặn UI
+      fetch(`${API_BASE}/tracks/${trackId}/play`, {
+        method: "POST",
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          // nếu backend trả popularity number thì sync lại (tùy backend)
+          if (!data || typeof data.popularity !== "number") return;
+
+          // Cập nhật queue local để UI thấy số lượt nghe mới
+          setQueue((prev) =>
+            prev.map((t) =>
+              t.id === trackId ? { ...t, popularity: data.popularity } : t,
+            ),
+          );
+        })
+        .catch(() => {
+          // lỗi network thì bỏ qua, không ảnh hưởng player
+        });
+    },
+    [setQueue],
+  );
 
   const [index, setIndexState] = useState<number>(() => {
     if (typeof window === "undefined") return 0;
@@ -83,6 +128,7 @@ export default function PlayerProvider({ children }: { children: React.ReactNode
 
   const [time, setTime] = useState(0);
   const [duration, setDuration] = useState(0);
+
   const [volume, setVolumeState] = useState<number>(() => {
     if (typeof window === "undefined") return 1;
     const v = Number(localStorage.getItem(LS_VOL) ?? 1);
@@ -96,7 +142,15 @@ export default function PlayerProvider({ children }: { children: React.ReactNode
     return queue[index];
   }, [queue, index]);
 
-  // ===== helper để setIndex & lưu localStorage =====
+  // keep refs in sync for audio listeners (listener chỉ gắn 1 lần)
+  useEffect(() => {
+    currentRef.current = current;
+  }, [current]);
+
+  useEffect(() => {
+    queueRef.current = queue;
+  }, [queue]);
+
   const setIndex = useCallback((i: number) => {
     setIndexState(i);
     try {
@@ -117,7 +171,7 @@ export default function PlayerProvider({ children }: { children: React.ReactNode
     if (audio.current) audio.current.volume = clamped;
   }, []);
 
-  // ===== restore last time for current track =====
+  // load lại vị trí nghe gần nhất cho bài hiện tại (nếu có)
   useEffect(() => {
     if (!current) return;
     try {
@@ -143,12 +197,11 @@ export default function PlayerProvider({ children }: { children: React.ReactNode
       // khi load xong metadata thì seek về vị trí cũ nếu có
       try {
         const lastRaw = localStorage.getItem(LS_LAST);
-        if (lastRaw && current) {
+        if (lastRaw && currentRef.current) {
           const last = JSON.parse(lastRaw) as { id: string; time: number };
-          if (last?.id === current.id && Number.isFinite(last.time)) {
+          if (last?.id === currentRef.current.id && Number.isFinite(last.time)) {
             const t = Math.max(0, Math.min(last.time, el.duration || last.time));
             el.currentTime = t;
-            setTime(t);
           }
         }
       } catch {
@@ -160,33 +213,71 @@ export default function PlayerProvider({ children }: { children: React.ReactNode
       const t = el.currentTime || 0;
       setTime(t);
 
+      const live = currentRef.current;
       const now = Date.now();
-      if (!current || now - lastPersistRef.current < 1000) return;
+      if (!live || now - lastPersistRef.current < 1000) return;
       lastPersistRef.current = now;
 
       // lưu vị trí hiện tại
       try {
         localStorage.setItem(
           LS_LAST,
-          JSON.stringify({ id: current.id, time: Math.floor(t) }),
+          JSON.stringify({ id: live.id, time: Math.floor(el.currentTime || 0) }),
         );
       } catch {
         // ignore
+      }
+
+      // ===== +1 lượt nghe khi nghe > 50% duration (mỗi bài 1 lần) =====
+      // reset đã được xử lý khi current đổi (ở effect current?.id)
+      if (countedRef.current && countedTrackIdRef.current === live.id) return;
+
+      const durFromAudio = Number.isFinite(el.duration) ? el.duration : NaN;
+      const durFromTrack =
+        typeof (live as any).duration === "number" && Number.isFinite((live as any).duration)
+          ? (live as any).duration
+          : 0;
+      const dur =
+        Number.isFinite(durFromAudio) && durFromAudio > 0 ? durFromAudio : durFromTrack;
+      if (!dur || dur <= 0) return;
+
+      if (t >= dur * 0.5) {
+        countedRef.current = true;
+        countedTrackIdRef.current = live.id;
+
+        // Realtime UI: +1 ngay lập tức (null-safe)
+        setQueue((prev) =>
+          prev.map((x) =>
+            x.id === live.id
+              ? {
+                  ...x,
+                  popularity:
+                    typeof (x as any).popularity === "number"
+                      ? (x as any).popularity + 1
+                      : 1,
+                }
+              : x,
+          ),
+        );
+
+        // Sync backend (fire-and-forget)
+        bumpPopularity(live.id);
       }
     };
 
     const onEnded = () => {
       setTime(el.duration || 0);
       setPlaying(false);
-      setIndex((i) => (i + 1 < queue.length ? i + 1 : i));
+      setIndex((i) => (i + 1 < queueRef.current.length ? i + 1 : i));
     };
 
     const beforeUnload = () => {
-      if (!current) return;
+      const live = currentRef.current;
+      if (!live) return;
       try {
         localStorage.setItem(
           LS_LAST,
-          JSON.stringify({ id: current.id, time: Math.floor(el.currentTime || 0) }),
+          JSON.stringify({ id: live.id, time: Math.floor(el.currentTime || 0) }),
         );
       } catch {
         // ignore
@@ -220,25 +311,38 @@ export default function PlayerProvider({ children }: { children: React.ReactNode
     const el = audio.current;
     if (!el || !current) return;
 
-    let src = current.audioUrl || "";
-    if (src && !src.startsWith("http")) {
-      // nếu chỉ là /music/xxx.mp3 thì thêm origin
-      const origin =
-        typeof window !== "undefined" ? window.location.origin : "";
-      src = origin + src;
+    // reset "đã cộng lượt nghe" khi đổi bài
+    if (countedTrackIdRef.current !== current.id) {
+      countedRef.current = false;
+      countedTrackIdRef.current = null;
     }
 
-    console.log("[PLAYER] set src =", src, "from audioUrl =", current.audioUrl);
+    const src = resolveMediaUrl(current.audioUrl);
+
+    console.log(
+      "[PLAYER] set src =",
+      src,
+      "from audioUrl =",
+      current.audioUrl,
+    );
 
     el.src = src;
     el.load();
     el.volume = volume;
-    setTime(0);
-  }, [queue, index, current, volume]);
 
-  // ===== khi đổi bài -> ghi lại lịch sử mp:recent =====
-  useEffect(() => {
-    if (!current) return;
+    // set duration ngay nếu có
+    setDuration(el.duration || 0);
+
+    // nếu đang play -> play luôn
+    if (playing) {
+      el.play().catch((err) => {
+        console.error("[PLAYER] play() failed", err);
+        console.error("Audio src now:", el.src);
+        setPlaying(false);
+      });
+    }
+
+    // lưu recent ids
     try {
       const raw = localStorage.getItem(LS_RECENT);
       const ids: string[] = raw ? JSON.parse(raw) : [];
@@ -254,36 +358,21 @@ export default function PlayerProvider({ children }: { children: React.ReactNode
 
   // ===== play / pause khi state playing đổi =====
   useEffect(() => {
-    const el = audio.current;
-    if (!el || !current) return;
-
-    if (playing) {
-      el
-        .play()
-        .then(() => {
-          console.log("[PLAYER] playing", current.title);
-        })
-        .catch((err) => {
-          console.error("AUDIO PLAY ERROR:", err);
-          console.error("Current track:", current);
-          console.error("Audio src now:", el.src);
-          setPlaying(false);
-        });
-    } else {
-      el.pause();
-    }
-  }, [playing, current]);
-
-  // ===== persist playing flag =====
-  useEffect(() => {
     try {
       localStorage.setItem(LS_PLAYING, playing ? "1" : "0");
     } catch {
       // ignore
     }
+    const el = audio.current;
+    if (!el) return;
+
+    if (playing) {
+      el.play().catch(() => setPlaying(false));
+    } else {
+      el.pause();
+    }
   }, [playing]);
 
-  // ===== ACTIONS =====
   const toggle = useCallback(() => {
     setPlaying((p) => !p);
   }, []);
@@ -303,19 +392,8 @@ export default function PlayerProvider({ children }: { children: React.ReactNode
       const target = (pct / 100) * duration;
       el.currentTime = target;
       setTime(target);
-
-      if (current) {
-        try {
-          localStorage.setItem(
-            LS_LAST,
-            JSON.stringify({ id: current.id, time: Math.floor(target) }),
-          );
-        } catch {
-          // ignore
-        }
-      }
     },
-    [duration, current],
+    [duration],
   );
 
   const addToQueue = useCallback((t: Track) => {
@@ -339,19 +417,24 @@ export default function PlayerProvider({ children }: { children: React.ReactNode
     }
   }, [setIndex]);
 
-  const playNow = useCallback((t: Track) => {
-    setQueue((q) => {
-      const existingIndex = q.findIndex((x) => x.id === t.id);
-      if (existingIndex !== -1) {
-        setIndex(existingIndex);
-        return q;
-      }
-      const newQueue = [...q, t];
-      setIndex(newQueue.length - 1);
-      return newQueue;
-    });
-    setPlaying(true);
-  }, [setIndex]);
+  const playNow = useCallback(
+    (t: Track) => {
+      setQueue((q) => {
+        const existingIndex = q.findIndex((x) => x.id === t.id);
+        if (existingIndex !== -1) {
+          // đã có trong queue thì chỉ nhảy tới bài đó
+          setIndex(existingIndex);
+          return q;
+        }
+        const newQueue = [...q, t];
+        setIndex(newQueue.length - 1);
+        return newQueue;
+      });
+
+      setPlaying(true);
+    },
+    [setIndex],
+  );
 
   // nhận event "add-track" từ ngoài (ví dụ TrackCard dispatch CustomEvent)
   useEffect(() => {

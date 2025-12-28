@@ -1,11 +1,9 @@
 // app/layout.tsx
 import "./globals.css";
 import PlayerProvider from "./providers/PlayerProvider";
-import PlayerBar from "../components/PlayerBar";
-import Nav from "../components/Nav";
 import ToastProvider from "@/components/ToastProvider";
 import AuthProvider from "./providers/AuthProvider";
-import ClientOnly from "@/components/ClientOnly";
+import Shell from "./Shell";
 
 export const metadata = {
   title: "Music Player",
@@ -29,11 +27,7 @@ export default function RootLayout({
         <AuthProvider>
           <ToastProvider>
             <PlayerProvider>
-              <Nav />
-              {children}
-              <ClientOnly>
-                <PlayerBar />
-              </ClientOnly>
+              <Shell>{children}</Shell>
             </PlayerProvider>
           </ToastProvider>
         </AuthProvider>

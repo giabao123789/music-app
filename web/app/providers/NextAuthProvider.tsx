@@ -1,10 +1,15 @@
 "use client";
-import { SessionProvider } from "next-auth/react";
 
+import type { ReactNode } from "react";
+
+/**
+ * Stub cho NextAuthProvider để không còn phụ thuộc next-auth/react.
+ * Nếu chỗ khác vẫn import NextAuthProvider thì vẫn chạy bình thường.
+ */
 export default function NextAuthProvider({
   children,
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
-  return <SessionProvider>{children}</SessionProvider>;
+  return <>{children}</>;
 }
