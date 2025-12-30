@@ -22,10 +22,16 @@ export class FollowsService {
   async follow(userId: string, artistId: string) {
     await this.ensureArtistExists(artistId);
 
-    // Đã follow rồi thì trả trạng thái hiện tại
+    // ✅ FIX: Tránh Prisma parse Follow.createdAt (đang bị dữ liệu string -> DateTime lỗi)
+    // Chỉ select field cần để kiểm tra tồn tại
     const existing = await this.prisma.follow.findUnique({
       where: {
         userId_artistId: { userId, artistId },
+      },
+      select: {
+        id: true,
+        userId: true,
+        artistId: true,
       },
     });
 
@@ -101,32 +107,48 @@ export class FollowsService {
   }
 
   /** LẤY DANH SÁCH NGHỆ SĨ USER ĐÃ FOLLOW */
-  
-    async getMyFollowingArtists(userId: string) {
-  // ✅ Tránh Prisma phải parse Follow.createdAt (đang bị string -> DateTime lỗi)
-  // ✅ Không dùng orderBy createdAt nữa để không đụng field bẩn
-  const rows = await this.prisma.follow.findMany({
-    where: { userId },
-    select: {
-      artistId: true,
-      artist: {
-        include: {
-          _count: {
-            select: {
-              tracks: true,
-              followers: true,
+  async getMyFollowingArtists(userId: string) {
+    // ✅ Tránh Prisma phải parse Follow.createdAt (đang bị string -> DateTime lỗi)
+    // ✅ Không dùng orderBy createdAt nữa để không đụng field bẩn
+    const rows = await this.prisma.follow.findMany({
+      where: { userId },
+      select: {
+        artistId: true,
+        artist: {
+          include: {
+            _count: {
+              select: {
+                tracks: true,
+                followers: true,
+              },
             },
           },
         },
       },
-    },
-  });
+    });
 
-  // Trả về list artist cho FE dùng luôn (FE bạn đã hỗ trợ x.artist ?? x)
-  return rows
-    .map((r) => r.artist)
-    .filter(Boolean);
-}
+    // Trả về list artist cho FE dùng luôn (FE bạn đã hỗ trợ x.artist ?? x)
+    return rows.map((r) => r.artist).filter(Boolean);
+  }
+  // api/src/follows/follows.service.ts
+  /** ✅ FIX REFRESH: followersCount + isFollowing (need login) */
+  async getFollowStatus(userId: string, artistId: string) {
+    await this.ensureArtistExists(artistId);
 
+    // ✅ select field an toàn, tránh parse createdAt bẩn
+    const existing = await this.prisma.follow.findUnique({
+      where: { userId_artistId: { userId, artistId } },
+      select: { id: true },
+    });
+
+    const followersCount = await this.prisma.follow.count({
+      where: { artistId },
+    });
+
+    return {
+      followersCount,
+      isFollowing: !!existing,
+    };
+  }
 
 }

@@ -747,7 +747,8 @@ export default function AdminTracksPage() {
                       <>
                         <button
                           onClick={() => startEdit(track)}
-                          className="px-3 py-1 rounded-full text-xs font-semibold bg-[#4cc9f0] hover:bg-[#3aa7cb] text-black shadow-md shadow-cyan-500/40"
+                          className="rounded-full border border-cyan-400/40 bg-cyan-500/10 px-3 py-1.5 text-xs text-cyan-100
+                 hover:bg-cyan-500/20 hover:border-cyan-300"
                         >
                           Sửa
                         </button>

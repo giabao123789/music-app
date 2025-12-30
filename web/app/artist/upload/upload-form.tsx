@@ -484,7 +484,7 @@ export function UploadTrackForm({
           </select>
         ) : (
           <p className="text-[11px] text-slate-400">
-            Chưa có album nào. Bạn có thể tạo album ở form phía trên.
+            Chưa có album nào. Bạn có thể tạo album ở form phía dưới.
           </p>
         )}
         <p className="text-[11px] text-slate-400">
@@ -504,7 +504,7 @@ export function UploadTrackForm({
             <input
               type="text"
               className="w-full rounded-lg border border-cyan-500/40 bg-slate-950/60 px-3 py-2 text-sm text-white outline-none ring-0 focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/70"
-              placeholder="Ví dụ: Lạc Trôi"
+              placeholder=""
               value={title}
               onChange={(e) => setTitle(e.target.value)}
             />
@@ -568,7 +568,7 @@ export function UploadTrackForm({
                 onChange={(e) => setCoverFile(e.target.files?.[0] || null)}
               />
               <p className="text-[11px] text-slate-400">
-                Ảnh sẽ được upload lên <code>/uploads/images</code> trên backend.
+               
               </p>
             </div>
           </div>
@@ -589,7 +589,7 @@ export function UploadTrackForm({
                   onChange={(e) => setDuration(e.target.value)}
                 />
                 <p className="text-[11px] text-slate-400">
-                  Khi chọn mp3, hệ thống tự điền duration theo file (bạn vẫn có thể sửa).
+                  Khi chọn mp3, hệ thống tự điền duration theo file.
                 </p>
               </div>
             )}
@@ -713,7 +713,7 @@ export function UploadTrackForm({
                         className="w-full rounded-lg bg-slate-900/70 border border-slate-700 px-3 py-2 text-sm text-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-400"
                       >
                         <option value="" className="bg-slate-900">
-                          — Không chọn (ẩn badge) —
+                          — Chọn thể loại —
                         </option>
                         {GENRES.map((g) => (
                           <option key={g.value} value={g.value} className="bg-slate-900">
@@ -722,7 +722,7 @@ export function UploadTrackForm({
                         ))}
                       </select>
                       <p className="text-[11px] text-slate-400">
-                        Genre = null thì UI sẽ ẩn badge.
+                        
                       </p>
                     </div>
 
@@ -740,7 +740,7 @@ export function UploadTrackForm({
                           placeholder="Tự lấy từ file mp3 (có thể sửa)"
                         />
                         <p className="text-[11px] text-slate-400">
-                          Duration tự lấy từ file mp3 nếu đọc được metadata.
+                         
                         </p>
                       </div>
                     )}

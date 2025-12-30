@@ -89,32 +89,35 @@ type SearchResult = {
 
 const SLIDES = [
   {
-    
     id: 1,
     title: "Khám Phá Kho Nhạc Số Hoàn Toàn Miễn Phí",
-    subtitle: "Tận hưởng hàng nghìn bản nhạc Demo chất lượng cao với giao diện trình phát nhạc mượt mà.",
+    subtitle:
+      "Tận hưởng hàng nghìn bản nhạc Demo chất lượng cao với giao diện trình phát nhạc mượt mà.",
     image:
       "https://images.pexels.com/photos/164745/pexels-photo-164745.jpeg?auto=compress&cs=tinysrgb&w=1200",
   },
   {
     id: 2,
     title: "Nâng Tầm Nghệ Sĩ - Lan Tỏa Đam Mê",
-    subtitle: "Dễ dàng đăng tải tác phẩm, tùy chỉnh thông tin và tiếp cận cộng đồng người nghe chuyên nghiệp.",
-    
+    subtitle:
+      "Dễ dàng đăng tải tác phẩm, tùy chỉnh thông tin và tiếp cận cộng đồng người nghe chuyên nghiệp.",
+
     image:
       "https://toigingiuvedep.vn/wp-content/uploads/2021/05/hinh-anh-nen-am-nhac-3d.jpg",
   },
   {
     id: 3,
-   title: "Không Gian Âm Nhạc Của Riêng Bạn",
-    subtitle: "Tự do tạo lập Playlist theo tâm trạng và lưu trữ thư viện nhạc yêu thích mọi lúc mọi nơi.",
+    title: "Không Gian Âm Nhạc Của Riêng Bạn",
+    subtitle:
+      "Tự do tạo lập Playlist theo tâm trạng và lưu trữ thư viện nhạc yêu thích mọi lúc mọi nơi.",
     image:
       "https://img.lovepik.com/bg/20240328/Boosting-Creativity-Brain-Wearing-Headphones-in-3D-Music-Illustration-with_5589349_wh1200.jpg",
   },
   {
     id: 4,
-  title: "Thiết Kế Tinh Tế - Trải Nghiệm Hoàn Mỹ",
-    subtitle: "Giao diện Dark Mode thời thượng, tối ưu hóa theo phong cách của các nền tảng âm nhạc hàng đầu.",
+    title: "Thiết Kế Tinh Tế - Trải Nghiệm Hoàn Mỹ",
+    subtitle:
+      "Giao diện Dark Mode thời thượng, tối ưu hóa theo phong cách của các nền tảng âm nhạc hàng đầu.",
 
     image:
       "https://images.pexels.com/photos/164829/pexels-photo-164829.jpeg?auto=compress&cs=tinysrgb&w=1200",
@@ -361,8 +364,7 @@ export default function HomePage() {
 
   const [genreTab, setGenreTab] = useState<(typeof GENRE_META)[number]["key"]>("POP");
 
-  const normalizeGenreKey = (g: any): string =>
-    String(g || "").toUpperCase().trim();
+  const normalizeGenreKey = (g: any): string => String(g || "").toUpperCase().trim();
 
   const genreBuckets = useMemo(() => {
     const map = new Map<string, TrackItem[]>();
@@ -403,6 +405,20 @@ export default function HomePage() {
 
   const [genreSlide, setGenreSlide] = useState(0);
   const { playNow, addToQueue } = usePlayer();
+
+  // ✅ FIX: define playFromSearch (đang bị gọi nhưng chưa khai báo)
+  const playFromSearch = (item: SearchResult) => {
+    if (!item || item.type !== "track") return;
+
+    const t = tracks.find((x) => x.id === item.id);
+    if (!t) {
+      console.warn("[SEARCH] Track not found:", item.id);
+      return;
+    }
+
+    playNow(t as any);
+    setSearch(""); // đóng dropdown
+  };
 
   const [openGenre, setOpenGenre] = useState<string | null>(null);
 
@@ -480,80 +496,81 @@ export default function HomePage() {
                 className="input-glass pl-10 text-sm"
               />
 
-                {/* DROPDOWN KẾT QUẢ TÌM KIẾM */}
-                {q.length > 0 && searchResults.length > 0 && (
-                  <div className="absolute mt-2 left-0 right-0 rounded-2xl bg-[#050816]/95 border border-white/10 shadow-2xl backdrop-blur-xl max-h-80 overflow-y-auto z-30">
-                    <div className="px-3 py-2 border-b border-white/10 text-[11px] text-slate-300">
-                      Kết quả cho:{" "}
-                      <span className="font-semibold text-slate-100">“{search}”</span>
-                    </div>
-
-                    <ul className="py-1 text-sm">
-                      {searchResults.map((item) => {
-                        const icon =
-                          item.type === "track" ? "🎵" : item.type === "artist" ? "👤" : "💿";
-
-                        const href =
-                          item.type === "artist" ? `/artists/${item.id}` : "#";
-
-                        const content = (
-                          <div className="flex items-center gap-2 px-3 py-2 hover:bg-white/5 cursor-pointer">
-                            {item.coverUrl ? (
-                              // ✅ KHÔNG nhét comment JSX vào giữa ternary nữa
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={resolveCoverSrc(item.coverUrl)}
-                                alt={item.title || "cover"}
-                                className="w-8 h-8 rounded-lg object-cover flex-shrink-0"
-                                onError={(e) => {
-                                  (e.currentTarget as HTMLImageElement).src = "/default-cover.jpg";
-                                }}
-                              />
-                            ) : (
-                              <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-xs">
-                                {icon}
-                              </div>
-                            )}
-
-                            <div className="min-w-0 flex-1">
-                              <div className="truncate text-[13px] font-medium">{item.title}</div>
-                              {item.subtitle && (
-                                <div className="text-[11px] text-slate-300 truncate">{item.subtitle}</div>
-                              )}
-                            </div>
-
-                            <div className="text-[10px] uppercase tracking-wide text-slate-400">
-                              {item.type === "track" ? "Bài hát" : item.type === "artist" ? "Nghệ sĩ" : "Album"}
-                            </div>
-                          </div>
-                        );
-
-                       return (
-  <li key={`${item.type}-${item.id}`}>
-    {item.type === "artist" ? (
-      <Link href={`/artists/${item.id}`} onClick={() => setSearch("")}>
-        {content}
-      </Link>
-    ) : item.type === "track" ? (
-      <button
-        type="button"
-        onClick={() => playFromSearch(item)}
-        className="w-full text-left"
-      >
-        {content}
-      </button>
-    ) : (
-      // album (nếu bạn chưa có route album) thì giữ nguyên như cũ: không làm gì
-      content
-    )}
-  </li>
-);
-
-                      })}
-                    </ul>
+              {/* DROPDOWN KẾT QUẢ TÌM KIẾM */}
+              {q.length > 0 && searchResults.length > 0 && (
+                <div className="absolute mt-2 left-0 right-0 rounded-2xl bg-[#050816]/95 border border-white/10 shadow-2xl backdrop-blur-xl max-h-80 overflow-y-auto z-30">
+                  <div className="px-3 py-2 border-b border-white/10 text-[11px] text-slate-300">
+                    Kết quả cho:{" "}
+                    <span className="font-semibold text-slate-100">“{search}”</span>
                   </div>
-                )}
-              </div>
+
+                  <ul className="py-1 text-sm">
+                    {searchResults.map((item) => {
+                      const icon =
+                        item.type === "track" ? "🎵" : item.type === "artist" ? "👤" : "💿";
+
+                      const href = item.type === "artist" ? `/artists/${item.id}` : "#";
+
+                      const content = (
+                        <div className="flex items-center gap-2 px-3 py-2 hover:bg-white/5 cursor-pointer">
+                          {item.coverUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={resolveCoverSrc(item.coverUrl)}
+                              alt={item.title || "cover"}
+                              className="w-8 h-8 rounded-lg object-cover flex-shrink-0"
+                              onError={(e) => {
+                                (e.currentTarget as HTMLImageElement).src = "/default-cover.jpg";
+                              }}
+                            />
+                          ) : (
+                            <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-xs">
+                              {icon}
+                            </div>
+                          )}
+
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-[13px] font-medium">{item.title}</div>
+                            {item.subtitle && (
+                              <div className="text-[11px] text-slate-300 truncate">{item.subtitle}</div>
+                            )}
+                          </div>
+
+                          <div className="text-[10px] uppercase tracking-wide text-slate-400">
+                            {item.type === "track"
+                              ? "Bài hát"
+                              : item.type === "artist"
+                              ? "Nghệ sĩ"
+                              : "Album"}
+                          </div>
+                        </div>
+                      );
+
+                      return (
+                        <li key={`${item.type}-${item.id}`}>
+                          {item.type === "artist" ? (
+                            <Link href={`/artists/${item.id}`} onClick={() => setSearch("")}>
+                              {content}
+                            </Link>
+                          ) : item.type === "track" ? (
+                            <button
+                              type="button"
+                              onClick={() => playFromSearch(item)}
+                              className="w-full text-left"
+                            >
+                              {content}
+                            </button>
+                          ) : (
+                            // album (nếu bạn chưa có route album) thì giữ nguyên như cũ: không làm gì
+                            content
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
+            </div>
           </div>
         </header>
 
@@ -561,14 +578,13 @@ export default function HomePage() {
         <div className="flex-1 px-4 md:px-8 py-6 space-y-8 overflow-y-auto">
           {/* Chào user */}
           {user && (
-  <h1 className="mb-2 text-2xl font-semibold text-slate-100">
-    Xin chào,{" "}
-    <span className="font-bold text-[#4CC9ED] drop-shadow-[0_0_10px_rgba(76,201,237,0.6)]">
-      {user.name || user.email}
-    </span>
-  </h1>
-)}
-
+            <h1 className="mb-2 text-2xl font-semibold text-slate-100">
+              Xin chào,{" "}
+              <span className="font-bold text-[#4CC9ED] drop-shadow-[0_0_10px_rgba(76,201,237,0.6)]">
+                {user.name || user.email}
+              </span>
+            </h1>
+          )}
 
           {/* ==== BANNER SLIDER ==== */}
           <section className="relative w-full overflow-hidden rounded-2xl glass">
@@ -596,7 +612,9 @@ export default function HomePage() {
             </div>
 
             <button
-              onClick={() => setCurrentSlide((currentSlide - 1 + SLIDES.length) % SLIDES.length)}
+              onClick={() =>
+                setCurrentSlide((currentSlide - 1 + SLIDES.length) % SLIDES.length)
+              }
               className="hidden md:flex absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/50 hover:bg-black/70 items-center justify-center text-slate-100 text-lg"
             >
               ‹
@@ -662,7 +680,9 @@ export default function HomePage() {
                       ‹
                     </button>
                     <button
-                      onClick={() => setRecommendSlide((recommendSlide + 1) % recommendSlides.length)}
+                      onClick={() =>
+                        setRecommendSlide((recommendSlide + 1) % recommendSlides.length)
+                      }
                       className="hidden md:flex absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/50 hover:bg-black/70 items-center justify-center text-slate-100 text-lg"
                     >
                       ›
@@ -688,12 +708,14 @@ export default function HomePage() {
           {/* ==== "Gợi ý bài hát" ==== */}
           <section className="space-y-3">
             <div className="flex items-center justify_between">
-              <h2 className="text-lg font-semibold">Gợi ý bài hát</h2>
+              <h2 className="text-lg font-semibold">Đã nghe gần đây</h2>
 
               {recSlides.length > 1 && (
                 <div className="flex gap-2">
                   <button
-                    onClick={() => setRecSlide((prev) => (prev - 1 + recSlides.length) % recSlides.length)}
+                    onClick={() =>
+                      setRecSlide((prev) => (prev - 1 + recSlides.length) % recSlides.length)
+                    }
                     className="w-7 h-7 rounded-full bg-black/40 hover:bg-black/70 flex items-center justify-center text-xs"
                   >
                     ‹
@@ -842,7 +864,7 @@ export default function HomePage() {
             <div className="flex items-end justify-between gap-3 flex-wrap">
               <div>
                 <h2 className="mt-1 text-lg font-semibold">
-                  Playlist gợi ý theo <span className="text-[#4CC3ED]">thể loại</span>
+                  Playlist gợi ý theo <span className="text-[#4CC9ED]">thể loại</span>
                 </h2>
               </div>
 

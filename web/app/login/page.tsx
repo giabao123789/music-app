@@ -1,3 +1,4 @@
+// web/app/login/page.tsx
 "use client";
 
 import { useState, FormEvent } from "react";
@@ -19,6 +20,14 @@ type LoginResponse = {
   };
 };
 
+function pickApiErrorMessage(data: any): string {
+  const msg = data?.message;
+  if (Array.isArray(msg)) return msg.filter(Boolean).join("\n");
+  if (typeof msg === "string" && msg.trim()) return msg;
+  if (typeof data?.error === "string" && data.error.trim()) return data.error;
+  return "Đăng nhập thất bại";
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -28,10 +37,15 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // ✅ NEW: error state để hiện dòng đỏ thay vì alert
+  const [error, setError] = useState<string | null>(null);
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    setError(null);
+
     if (!email || !password) {
-      alert("Vui lòng nhập email và mật khẩu");
+      setError("Vui lòng nhập email và mật khẩu");
       return;
     }
 
@@ -44,19 +58,19 @@ export default function LoginPage() {
         body: JSON.stringify({ email, password }),
       });
 
-      const data: LoginResponse | any = await res.json();
+      const data: LoginResponse | any = await res.json().catch(() => ({}));
 
       if (!res.ok || !data.ok) {
         console.error("Login error:", data);
-        alert("Đăng nhập thất bại");
+        setError(pickApiErrorMessage(data)); // ✅ show message cụ thể từ backend
         return;
       }
 
-      // Lưu token + user vào localStorage (GIỮ NGUYÊN)
+      // ✅ Lưu token + user (GIỮ NGUYÊN)
       localStorage.setItem("accessToken", data.accessToken);
       localStorage.setItem("currentUser", JSON.stringify(data.user));
 
-      // ✅ QUAN TRỌNG: set cookie để middleware không đá về /auth
+      // ✅ Cookie để middleware không đá về /auth (GIỮ NGUYÊN)
       const maxAge = 7 * 24 * 60 * 60; // 7 ngày
       document.cookie = `accessToken=${encodeURIComponent(
         data.accessToken
@@ -65,16 +79,14 @@ export default function LoginPage() {
         data.accessToken
       )}; Path=/; Max-Age=${maxAge}; SameSite=Lax`;
 
-      // === LOGIC CHUYỂN HƯỚNG (GIỮ NGUYÊN) ===
+      // ✅ Redirect theo rule của bạn (GIỮ NGUYÊN)
       const role = data.user.role as Role;
 
-      // 1) callbackUrl ưu tiên
       if (callbackUrl) {
         router.replace(callbackUrl);
         return;
       }
 
-      // 2) theo role
       if (role === "ADMIN") {
         router.replace("/admin/users");
       } else if (role === "ARTIST") {
@@ -84,7 +96,7 @@ export default function LoginPage() {
       }
     } catch (err) {
       console.error(err);
-      alert("Đăng nhập thất bại");
+      setError("Đăng nhập thất bại");
     } finally {
       setLoading(false);
     }
@@ -104,7 +116,7 @@ export default function LoginPage() {
         <source src="/videos/login.mp4" type="video/mp4" />
       </video>
 
-      {/* Overlay: PINK PASTEL NEON (nhẹ, không đậm) */}
+      {/* Overlay: PINK PASTEL NEON */}
       <div className="absolute inset-0 bg-black/55" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_18%,rgba(255,182,213,0.22),transparent_55%),radial-gradient(circle_at_25%_85%,rgba(255,118,188,0.16),transparent_60%),radial-gradient(circle_at_80%_70%,rgba(186,230,253,0.10),transparent_60%)]" />
 
@@ -112,9 +124,7 @@ export default function LoginPage() {
         <div className="w-full max-w-md">
           {/* Brand */}
           <div className="mb-6 text-center">
-            <div className="text-xs tracking-[0.45em] text-white/60">
-             2
-            </div>
+            <div className="text-xs tracking-[0.45em] text-white/60"></div>
             <div className="mt-2 text-4xl font-extrabold tracking-[0.14em] text-[#ffd1e6] drop-shadow-[0_0_24px_rgba(255,118,188,0.35)]">
               MUSIC WEBSITE
             </div>
@@ -133,7 +143,14 @@ export default function LoginPage() {
                 Nhập thông tin tài khoản của bạn.
               </p>
 
-              <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+              {/* ✅ ERROR MESSAGE (đỏ, không alert) */}
+              {error && (
+                <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-300">
+                  {error}
+                </div>
+              )}
+
+              <form onSubmit={handleSubmit} className="mt-4 space-y-4">
                 <div className="space-y-1">
                   <label className="block text-sm text-white/70">Email</label>
                   <input
@@ -163,14 +180,15 @@ export default function LoginPage() {
                 >
                   {loading ? "Đang đăng nhập..." : "Đăng nhập"}
                 </button>
-<div className="pt-2 text-center text-sm text-white/60">
-  <a
-    href="/forgot-password"
-    className="text-[#ffd1e6] hover:brightness-110 underline decoration-white/20"
-  >
-    Quên mật khẩu?
-  </a>
-</div>
+
+                <div className="pt-2 text-center text-sm text-white/60">
+                  <a
+                    href="/forgot-password"
+                    className="text-[#ffd1e6] hover:brightness-110 underline decoration-white/20"
+                  >
+                    Quên mật khẩu?
+                  </a>
+                </div>
 
                 <div className="pt-2 text-center text-sm text-white/60">
                   Chưa có tài khoản?{" "}
@@ -185,10 +203,7 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <div className="mt-6 text-center text-xs text-white/40">
-            Tip: Callback URL sẽ tự quay về đúng trang bạn định vào.
-          </div>
-        </div>
+                 </div>
       </div>
     </main>
   );

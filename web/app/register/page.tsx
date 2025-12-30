@@ -1,9 +1,30 @@
+// web/app/register/page.tsx
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 
 type Role = "USER" | "ARTIST";
+
+function pickApiErrorMessageFromText(raw: string): string {
+  if (!raw) return "Đăng ký thất bại";
+
+  try {
+    const data = JSON.parse(raw);
+    const msg = (data as any)?.message;
+
+    if (Array.isArray(msg)) {
+      const joined = msg.filter(Boolean).join("\n");
+      if (joined.trim()) return joined;
+    }
+    if (typeof msg === "string" && msg.trim()) return msg;
+
+    const err = (data as any)?.error;
+    if (typeof err === "string" && err.trim()) return err;
+  } catch {}
+
+  return raw.trim() || "Đăng ký thất bại";
+}
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -13,10 +34,17 @@ export default function RegisterPage() {
   const [role, setRole] = useState<Role>("USER");
   const [loading, setLoading] = useState(false);
 
+  // ✅ NEW: error state (hiển thị dưới form)
+  const [error, setError] = useState<string | null>(null);
+
   const handleStart = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // reset error mỗi lần submit
+    setError(null);
+
     if (!email || !password) {
-      alert("Nhập email + mật khẩu");
+      setError("Vui lòng nhập email và mật khẩu");
       return;
     }
 
@@ -34,9 +62,11 @@ export default function RegisterPage() {
       });
 
       const text = await res.text();
-      if (!res.ok) throw new Error(text || `HTTP ${res.status}`);
 
-      alert("Đã gửi OTP, vui lòng kiểm tra email!");
+      if (!res.ok) {
+        const friendly = pickApiErrorMessageFromText(text);
+        throw new Error(friendly);
+      }
 
       const q = new URLSearchParams({
         email,
@@ -47,7 +77,8 @@ export default function RegisterPage() {
 
       router.push(`/register/verify?${q.toString()}`);
     } catch (err: any) {
-      alert(`Đăng ký thất bại: ${err.message ?? err}`);
+      // ✅ hiển thị lỗi dưới form (không alert)
+      setError(err?.message || "Đăng ký thất bại");
     } finally {
       setLoading(false);
     }
@@ -67,16 +98,14 @@ export default function RegisterPage() {
         <source src="/videos/register.mp4" type="video/mp4" />
       </video>
 
-      {/* BLUE NEON overlay (không che video) */}
+      {/* BLUE NEON overlay */}
       <div className="absolute inset-0 bg-black/25" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_18%,rgba(56,189,248,0.22),transparent_55%),radial-gradient(circle_at_25%_85%,rgba(34,211,238,0.18),transparent_60%),radial-gradient(circle_at_80%_70%,rgba(99,102,241,0.14),transparent_60%)]" />
 
       <div className="relative z-10 mx-auto flex min-h-screen max-w-6xl items-center justify-center px-4 py-10">
         <div className="w-full max-w-md -translate-x-[300px]">
-
           {/* Brand */}
           <div className="mb-6 text-center">
-           
             <div className="mt-2 text-4xl font-extrabold tracking-[0.14em] text-[#38bdf8] drop-shadow-[0_0_26px_rgba(56,189,248,0.45)]">
               MUSIC WEB
             </div>
@@ -87,14 +116,20 @@ export default function RegisterPage() {
 
           {/* Card */}
           <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-4 shadow-[0_0_40px_rgba(56,189,248,0.12)]">
-
             <div className="pointer-events-none absolute inset-0 opacity-80 bg-[radial-gradient(circle_at_18%_12%,rgba(56,189,248,0.18),transparent_50%),radial-gradient(circle_at_85%_80%,rgba(34,211,238,0.12),transparent_55%)]" />
 
-            <form onSubmit={handleStart} className="relative space-y-1">
-              <h1 className="text-2xl font-semibold mb-1">Tạo tài khoản</h1>
+            <form onSubmit={handleStart} className="relative space-y-2">
+              <h1 className="text-2xl font-semibold">Tạo tài khoản</h1>
               <p className="text-sm text-white/60">
                 Nhập thông tin → hệ thống gửi OTP → bạn xác minh ở bước tiếp theo.
               </p>
+
+              {/* ❌ ERROR MESSAGE */}
+              {error && (
+                <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-300">
+                  {error}
+                </div>
+              )}
 
               {/* Email */}
               <div className="space-y-1">

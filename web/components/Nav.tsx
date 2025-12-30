@@ -140,30 +140,62 @@ export default function Nav() {
   return (
     <nav
       className={
-        "navbar-gradient text-white flex items-center gap-4 px-4 py-3 " +
+        "navbar-gradient text-white flex items-center gap-4 px-4 py-2 " +
         "border-b border-white/10 shadow-lg shadow-black/40 sticky top-0 z-40"
       }
     >
       {/* Logo + tên app */}
-      <div className="flex items-center gap-3">
-        <div
-          className="
-            w-9 h-9 rounded-full
-            bg-gradient-to-br from-[#4e148c] via-[#4361ee] to-[#4cc9f0]
-            flex items-center justify-center
-            text-xs font-bold
-            shadow-[0_0_20px_rgba(76,201,240,0.9)]
-          "
-        >
-          ♫
-        </div>
-        <span className="font-semibold text-sm sm:text-base tracking-wide">
-          Music App
-        </span>
-      </div>
+  <div className="flex items-center gap-3">
+  {/* LOGO */}
+  <div
+  className="
+    relative
+    flex items-center justify-center
+    w-14 h-14 sm:w-14 sm:h-14
+  "
+>
+  {/* glow layer */}
+  <div
+    className="
+      absolute inset-0
+      rounded-full
+      blur-md
+      bg-gradient-to-br from-[#4cc9f0] via-[#4361ee] to-[#4e148c]
+      opacity-70
+    "
+  />
+
+  {/* eslint-disable-next-line @next/next/no-img-element */}
+  <img
+    src="/logo.png"
+    alt="Music App Logo"
+    className="
+      relative
+      w-full h-full
+      object-contain
+      drop-shadow-[0_0_18px_rgba(76,201,240,0.9)]
+    "
+  />
+</div>
+
+
+
+  {/* TEXT */}
+  <span
+    className="
+      font-semibold text-sm sm:text-base tracking-wide
+      bg-gradient-to-r from-[#4cc9f0] via-[#4361ee] to-[#a855f7]
+      bg-clip-text text-transparent
+      drop-shadow-[0_0_18px_rgba(255,255,255,0.5)]
+    "
+  >
+    Music Website
+  </span>
+</div>
+
 
       {/* NAV LINKS */}
-      <div className="flex gap-4 ml-4 text-xs sm:text-sm items-center">
+      <div className="flex gap-4 ml-3 text-xs sm:text-sm items-center">
         {/* USER / ADMIN (không phải ARTIST) */}
         {!isArtist && (
           <>

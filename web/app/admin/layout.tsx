@@ -7,9 +7,10 @@ import AdminGuard from "@/components/AdminGuard";
 
 const NAV_ITEMS = [
   { href: "/admin/dashboard", label: "Dashboard" },
-  { href: "/admin/users", label: "Người dùng" },
-  { href: "/admin/artists", label: "Nghệ sĩ" },
+  { href: "/admin/users", label: "Users" },
+  { href: "/admin/artists", label: "Artists" },
   { href: "/admin/tracks", label: "Tracks" },
+   { href: "/admin/albums", label: "Albums" },
 ];
 
 export default function AdminLayout({

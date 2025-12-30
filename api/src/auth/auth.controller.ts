@@ -4,6 +4,7 @@ import {
   Body,
   Controller,
   Post,
+  ConflictException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Role, OtpPurpose } from '@prisma/client';
@@ -61,6 +62,13 @@ export class AuthController {
       throw new BadRequestException('Mật khẩu tối thiểu 4 ký tự');
     }
 
+    // ✅ Patch: Nếu tài khoản đã tồn tại (đã verified) → báo "Tài khoản đã tồn tại"
+    // (giữ nguyên các chức năng khác, chỉ thêm check này)
+    const existing = await this.prisma.user.findUnique({ where: { email } });
+    if (existing?.verified) {
+      throw new ConflictException('Tài khoản đã tồn tại');
+    }
+
     await this.otp.issueForEmail(email, OtpPurpose.REGISTER);
 
     return { ok: true, message: 'OTP đã được gửi nếu email hợp lệ' };
@@ -90,6 +98,11 @@ export class AuthController {
     let user = await this.prisma.user.findUnique({ where: { email } });
     const now = new Date();
 
+    // ✅ Patch: Nếu user đã tồn tại và đã verified → không cho "đăng ký lại" ghi đè password/role
+    if (user?.verified) {
+      throw new ConflictException('Tài khoản đã tồn tại');
+    }
+
     if (!user) {
       user = await this.prisma.user.create({
         data: {
@@ -102,6 +115,7 @@ export class AuthController {
         },
       });
     } else {
+      // trường hợp user tồn tại nhưng chưa verified → cho phép set verified + cập nhật password
       user = await this.prisma.user.update({
         where: { id: user.id },
         data: {
@@ -152,8 +166,9 @@ export class AuthController {
       where: { email },
     });
 
+    // ✅ Patch: phân biệt rõ "tài khoản không tồn tại"
     if (!user) {
-      throw new BadRequestException('Email hoặc mật khẩu không đúng');
+      throw new BadRequestException('Tài khoản không tồn tại');
     }
 
     let isMatch = false;
@@ -175,8 +190,9 @@ export class AuthController {
       }
     }
 
+    // ✅ Patch: phân biệt rõ "sai mật khẩu"
     if (!isMatch) {
-      throw new BadRequestException('Email hoặc mật khẩu không đúng');
+      throw new BadRequestException('Sai mật khẩu');
     }
 
     const accessToken = this.jwt.sign({
@@ -197,70 +213,4 @@ export class AuthController {
       },
     };
   }
-
-  // =========================
-  // FORGOT PASSWORD
-  // =========================
-  @Public()
-  @Post('forgot-password')
-  async forgotPassword(@Body() dto: ForgotPasswordDto) {
-    const email = dto.email?.trim().toLowerCase();
-    if (!email) throw new BadRequestException('Email không hợp lệ');
-
-    // ✅ Không leak user tồn tại hay không: luôn trả ok
-    const user = await this.prisma.user.findUnique({ where: { email } });
-
-    if (user) {
-      // gửi OTP purpose RESET_PASSWORD
-      await this.otp.issueForEmail(email, OtpPurpose.RESET_PASSWORD);
-    }
-
-    return {
-      ok: true,
-      message: 'Nếu email tồn tại trong hệ thống, OTP sẽ được gửi.',
-    };
-  }
-
-  // =========================
-  // RESET PASSWORD
-  // =========================
-  @Public()
-  @Post('reset-password')
-  async resetPassword(@Body() dto: ResetPasswordDto) {
-    const email = dto.email?.trim().toLowerCase();
-    const code = dto.code?.trim();
-    const newPassword = dto.newPassword;
-
-    if (!email) throw new BadRequestException('Email không hợp lệ');
-    if (!code) throw new BadRequestException('Thiếu mã OTP');
-    if (!newPassword || newPassword.length < 4) {
-      throw new BadRequestException('Mật khẩu tối thiểu 4 ký tự');
-    }
-
-    const user = await this.prisma.user.findUnique({ where: { email } });
-    if (!user) {
-      // vẫn báo chung chung
-      throw new BadRequestException('OTP không hợp lệ hoặc đã hết hạn');
-    }
-
-    const ok = await this.otp.validateAndUse(
-      email,
-      OtpPurpose.RESET_PASSWORD,
-      code,
-    );
-
-    if (!ok) {
-      throw new BadRequestException('OTP không hợp lệ hoặc đã hết hạn');
-    }
-
-    const hash = await bcrypt.hash(newPassword, 10);
-
-    await this.prisma.user.update({
-      where: { id: user.id },
-      data: { password: hash },
-    });
-
-    return { ok: true, message: 'Đặt lại mật khẩu thành công' };
-  }
 }
-  

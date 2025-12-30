@@ -11,6 +11,8 @@ import { AdminUsersController } from './admin-users.controller';
 import { AdminArtistsController } from './admin-artists.controller';
 import { AdminTracksController } from './admin-tracks.controller';
 import { AdminStatsController } from './admin-stats.controller';
+import { AdminAlbumsController } from './admin-albums.controller'; // ✅ ADD
+
 
 @Module({
   imports: [PrismaModule, AuthModule],
@@ -19,6 +21,7 @@ import { AdminStatsController } from './admin-stats.controller';
     AdminArtistsController,
     AdminTracksController,
     AdminStatsController,
+    AdminAlbumsController,
   ],
   providers: [JwtAuthGuard, RolesGuard, AdminGuard],
 })

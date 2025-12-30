@@ -1,5 +1,5 @@
-// src/auth/auth.service.ts
-import { Injectable } from '@nestjs/common';
+// api/src/auth/auth.service.ts
+import { Injectable, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
@@ -53,6 +53,13 @@ export class AuthService {
       code,
       purpose: OtpPurpose.REGISTER,
     });
+
+    // ✅ Patch: nếu email đã tồn tại (đã verified) → báo "Tài khoản đã tồn tại"
+    // (an toàn: không xoá chức năng cũ, chỉ thêm check)
+    const existing = await this.prisma.user.findUnique({ where: { email } });
+    if (existing?.verified) {
+      throw new ConflictException('Tài khoản đã tồn tại');
+    }
 
     const hash = await bcrypt.hash(password, 10);
 

@@ -291,26 +291,54 @@ const getProfilePatchUrl = useCallback(() => {
     let cancelled = false;
 
     async function fetchFollow() {
-      try {
-        const res = await fetch(`${API_BASE}/artist/${artistId}/follow-count`);
-        if (!res.ok) throw new Error();
-        const data = await res.json();
+  try {
+    // 1) luôn lấy followersCount public
+    const res = await fetch(`${API_BASE}/artist/${artistId}/follow-count`);
+    if (!res.ok) throw new Error();
+    const data = await res.json();
+
+    const baseFollowersCount = data.followersCount ?? 0;
+
+    // 2) nếu có token thì lấy thêm isFollowing (need login)
+    const token = getTokenFromStorage();
+    if (token) {
+      const rs = await fetch(`${API_BASE}/artist/${artistId}/follow-status`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (rs.ok) {
+        const st = await rs.json();
         if (!cancelled) {
           setFollow({
-            followersCount: data.followersCount ?? 0,
-            isFollowing: data.isFollowing ?? false,
+            followersCount:
+              typeof st.followersCount === "number"
+                ? st.followersCount
+                : baseFollowersCount,
+            isFollowing: !!st.isFollowing,
           });
         }
-      } catch (e) {
-        console.error("[Follow] fetch error", e);
-        if (!cancelled) {
-          setFollow({
-            followersCount: 0,
-            isFollowing: false,
-          });
-        }
+        return;
       }
+      // nếu 401/403 thì fallback public (không crash)
     }
+
+    if (!cancelled) {
+      setFollow({
+        followersCount: baseFollowersCount,
+        isFollowing: false,
+      });
+    }
+  } catch (e) {
+    console.error("[Follow] fetch error", e);
+    if (!cancelled) {
+      setFollow({
+        followersCount: 0,
+        isFollowing: false,
+      });
+    }
+  }
+}
+
 
     fetchFollow();
     return () => {
