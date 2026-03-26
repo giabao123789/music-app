@@ -1,4 +1,4 @@
-// web components nav.tsx
+// web/components/nav.tsx
 "use client";
 
 import Link from "next/link";
@@ -119,6 +119,7 @@ export default function Nav() {
     })();
   }, [user, artistId]);
 
+  // ✅ UPDATED: Đăng xuất xong về trang /login ngay (không back lại được)
   const handleLogout = () => {
     if (typeof window !== "undefined") {
       localStorage.removeItem("accessToken");
@@ -131,7 +132,10 @@ export default function Nav() {
     }
     setUser(null);
     setArtistId(null);
-    router.push("/login");
+    setShowAdminMenu(false);
+
+    // ✅ về login ngay lập tức
+    router.replace("/login");
   };
 
   const role = user?.role;
@@ -145,54 +149,45 @@ export default function Nav() {
       }
     >
       {/* Logo + tên app */}
-  <div className="flex items-center gap-3">
-  {/* LOGO */}
-  <div
-  className="
-    relative
-    flex items-center justify-center
-    w-14 h-14 sm:w-14 sm:h-14
-  "
->
-  {/* glow layer */}
-  <div
-    className="
-      absolute inset-0
-      rounded-full
-      blur-md
-      bg-gradient-to-br from-[#4cc9f0] via-[#4361ee] to-[#4e148c]
-      opacity-70
-    "
-  />
+      <div className="flex items-center gap-3">
+        {/* LOGO */}
+        <div className="relative flex items-center justify-center w-14 h-14 sm:w-14 sm:h-14">
+          {/* glow layer */}
+          <div
+            className="
+              absolute inset-0
+              rounded-full
+              blur-md
+              bg-gradient-to-br from-[#4cc9f0] via-[#4361ee] to-[#4e148c]
+              opacity-70
+            "
+          />
 
-  {/* eslint-disable-next-line @next/next/no-img-element */}
-  <img
-    src="/logo.png"
-    alt="Music App Logo"
-    className="
-      relative
-      w-full h-full
-      object-contain
-      drop-shadow-[0_0_18px_rgba(76,201,240,0.9)]
-    "
-  />
-</div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/logo.png"
+            alt="Music App Logo"
+            className="
+              relative
+              w-full h-full
+              object-contain
+              drop-shadow-[0_0_18px_rgba(76,201,240,0.9)]
+            "
+          />
+        </div>
 
-
-
-  {/* TEXT */}
-  <span
-    className="
-      font-semibold text-sm sm:text-base tracking-wide
-      bg-gradient-to-r from-[#4cc9f0] via-[#4361ee] to-[#a855f7]
-      bg-clip-text text-transparent
-      drop-shadow-[0_0_18px_rgba(255,255,255,0.5)]
-    "
-  >
-    Music Website
-  </span>
-</div>
-
+        {/* TEXT */}
+        <span
+          className="
+            font-semibold text-sm sm:text-base tracking-wide
+            bg-gradient-to-r from-[#4cc9f0] via-[#4361ee] to-[#a855f7]
+            bg-clip-text text-transparent
+            drop-shadow-[0_0_18px_rgba(255,255,255,0.5)]
+          "
+        >
+          Music Website
+        </span>
+      </div>
 
       {/* NAV LINKS */}
       <div className="flex gap-4 ml-3 text-xs sm:text-sm items-center">
@@ -200,8 +195,9 @@ export default function Nav() {
         {!isArtist && (
           <>
             <Link href="/" className="hover:text-[#4cc9f0] transition-colors">
-              Music
+              Trang chủ
             </Link>
+
             <Link
               href="/favorites"
               className="hover:text-[#4cc9f0] transition-colors"
@@ -219,6 +215,14 @@ export default function Nav() {
               className="hover:text-[#4cc9f0] transition-colors"
             >
               Nghệ sĩ
+            </Link>
+
+            <Link
+              href="/tracks"
+              className="hover:text-[#4cc9f0] transition-colors"
+              title="Toàn bộ bài hát"
+            >
+              Bài hát
             </Link>
 
             {/* MENU ADMIN DROPDOWN */}

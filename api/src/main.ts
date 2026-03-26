@@ -27,10 +27,7 @@ async function bootstrap() {
     },
   });
 
-  // ✅ THÊM MỚI: Serve nhạc "track data / seed" từ web/public/music
-  // => http://localhost:3001/music/...
-  // process.cwd() khi chạy API thường là thư mục: music-app/api
-  // nên ../web/public/music là đúng cấu trúc bạn chụp màn hình
+  
   app.useStaticAssets(join(process.cwd(), '..', 'web', 'public', 'music'), {
     prefix: '/music',
     setHeaders: (res) => {
@@ -42,7 +39,7 @@ async function bootstrap() {
 
   await app.listen(process.env.PORT || 3001);
   console.log(
-    `🚀 API running at http://localhost:${process.env.PORT || 3001}`,
+    `API running at http://localhost:${process.env.PORT || 3001}`,
   );
 }
 bootstrap();

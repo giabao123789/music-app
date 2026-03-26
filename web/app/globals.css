@@ -27,11 +27,14 @@ body {
 .navbar-gradient {
   background: linear-gradient(
     
-    to left,
-    
+   135deg,
+  #220440 0%,
+  #4e148c 20%,
+  #bf3ba9 38%,
+  #a855f7 55%,
+  #6366f1 75%,
+  #22d3ee 100%);
   
-    #22d3ee, #6366f1, #a855f7,#4e148c ,#220440 
-  );
 }
 .sidebar-gradient {
   background: linear-gradient(

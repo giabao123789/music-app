@@ -7,9 +7,7 @@ export class TracksService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Public list tracks cho homepage, search...
-   *  - Ẩn các bài đã bị khoá (deletedAt != null) nhưng filter ở ngoài code
-   *    để không phụ thuộc schema Prisma (tránh lỗi Unknown argument deletedAt)
+   * Publargument deletedAt)
    *  - Hỗ trợ search theo q, genre, artistId, limit
    */
   async findAllPublic(params?: {

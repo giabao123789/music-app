@@ -48,6 +48,135 @@ export class AdminTracksController {
     return input.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
+  // ===== NEW: Notification helpers (KHÔNG đụng Prisma schema) =====
+  private async getPrimaryArtistIdForTrack(
+    trackId: string,
+  ): Promise<string | null> {
+    // 1) ưu tiên TrackArtist.isPrimary=true (nếu có)
+    try {
+      const taRes: any = await (this.prisma as any).$runCommandRaw({
+        find: 'TrackArtist',
+        filter: { trackId },
+        sort: { isPrimary: -1 },
+        limit: 1,
+      });
+
+      const first = taRes?.cursor?.firstBatch?.[0];
+      if (first && typeof first.artistId === 'string') return first.artistId;
+    } catch {
+      // ignore
+    }
+
+    // 2) fallback track.artistId (raw)
+    try {
+      const t: any = await (this.prisma as any).$runCommandRaw({
+        find: 'Track',
+        filter: { _id: trackId },
+        limit: 1,
+      });
+
+      const trackDoc = t?.cursor?.firstBatch?.[0];
+      if (trackDoc && typeof trackDoc.artistId === 'string')
+        return trackDoc.artistId;
+    } catch {
+      // ignore
+    }
+
+    // 3) fallback prisma (nếu track id là field id đúng)
+    try {
+      const track = await this.prisma.track.findUnique({
+        where: { id: trackId },
+        select: { artistId: true },
+      });
+      if (track?.artistId) return track.artistId;
+    } catch {
+      // ignore
+    }
+
+    return null;
+  }
+
+  private async createNotification(params: {
+    artistId: string;
+    type: 'TRACK_UPDATED' | 'TRACK_DELETED';
+    title: string;
+    message: string;
+    entity?: { type: 'Track'; id: string };
+    payload?: any;
+  }) {
+    // Collection "Notification" (tự tạo trong Mongo)
+    // structure đề xuất:
+    // { _id, artistId, type, title, message, entity, payload, createdAt, readAt }
+    const doc = {
+      _id: `noti_${Date.now()}_${Math.random().toString(16).slice(2)}`,
+      artistId: params.artistId,
+      type: params.type,
+      title: params.title,
+      message: params.message,
+      entity: params.entity ?? null,
+      payload: params.payload ?? null,
+      createdAt: new Date(),
+      readAt: null, // null = chưa đọc
+    };
+
+    try {
+      await (this.prisma as any).$runCommandRaw({
+        insert: 'Notification',
+        documents: [doc],
+      });
+    } catch (e) {
+      // Không cho fail cả API nếu notification lỗi (để không phá chức năng admin)
+      // console.error('[Notification] insert failed', e);
+    }
+  }
+
+  private buildTrackUpdateMessage(before: any, after: any, patch: any) {
+    const changed: string[] = [];
+
+    const safe = (v: any) =>
+      v === undefined ? '(không có)' : v === null ? 'null' : String(v);
+
+    if (
+      patch.title !== undefined &&
+      safe(before?.title) !== safe(after?.title)
+    ) {
+      changed.push(`Tên: "${safe(before?.title)}" → "${safe(after?.title)}"`);
+    }
+    if (
+      patch.genre !== undefined &&
+      safe(before?.genre) !== safe(after?.genre)
+    ) {
+      changed.push(`Thể loại: ${safe(before?.genre)} → ${safe(after?.genre)}`);
+    }
+    if (
+      patch.albumId !== undefined &&
+      safe(before?.albumId) !== safe(after?.albumId)
+    ) {
+      changed.push(
+        `AlbumId: ${safe(before?.albumId)} → ${safe(after?.albumId)}`,
+      );
+    }
+    if (
+      patch.coverUrl !== undefined &&
+      safe(before?.coverUrl) !== safe(after?.coverUrl)
+    ) {
+      changed.push(
+        `CoverUrl: ${safe(before?.coverUrl)} → ${safe(after?.coverUrl)}`,
+      );
+    }
+    if (
+      patch.audioUrl !== undefined &&
+      safe(before?.audioUrl) !== safe(after?.audioUrl)
+    ) {
+      changed.push(
+        `AudioUrl: ${safe(before?.audioUrl)} → ${safe(after?.audioUrl)}`,
+      );
+    }
+
+    if (!changed.length) return 'Admin đã cập nhật thông tin bài hát.';
+    return `Admin đã cập nhật bài hát:\n- ${changed.join('\n- ')}`;
+  }
+
   // GET /admin/tracks?search=...&genre=...&artist=...&from=...&to=...&page=1&limit=200
   // ✅ FIX: dùng Mongo raw để list đủ + normalize createdAt + map artistName ổn định
   @Get()
@@ -138,7 +267,6 @@ export class AdminTracksController {
       const aId = ta?.artistId;
       if (typeof tId !== 'string' || typeof aId !== 'string') continue;
 
-      // vì sort isPrimary:-1 nên record đầu tiên gặp sẽ là primary nếu có
       if (!artistIdByTrack.has(tId)) artistIdByTrack.set(tId, aId);
     }
 
@@ -215,7 +343,6 @@ export class AdminTracksController {
         artistId: finalArtistId ?? null,
         genre: t?.genre ?? null,
         coverUrl: t?.coverUrl ?? null,
-        isBlocked: t?.isBlocked ?? false,
         popularity: typeof t?.popularity === 'number' ? t.popularity : 0,
         createdAt,
       };
@@ -251,32 +378,82 @@ export class AdminTracksController {
       albumId?: string | null;
       coverUrl?: string | null;
       audioUrl?: string | null;
-      isBlocked?: boolean;
-      // web đang gửi albumTitle, backend không có field này trong Track => bỏ qua để không phá schema
-      albumTitle?: string | null;
+      albumTitle?: string | null; // ignore
     },
   ) {
+    // Lấy bản ghi trước khi update để tạo message diff
+    const before = await this.prisma.track.findUnique({ where: { id } });
+    if (!before) throw new NotFoundException('Track not found');
+
     const data: any = {};
     if (body.title !== undefined) data.title = body.title;
     if (body.genre !== undefined) data.genre = body.genre;
     if (body.albumId !== undefined) data.albumId = body.albumId;
     if (body.coverUrl !== undefined) data.coverUrl = body.coverUrl;
     if (body.audioUrl !== undefined) data.audioUrl = body.audioUrl;
-    if (body.isBlocked !== undefined) data.isBlocked = body.isBlocked;
 
-    return this.prisma.track.update({
+    const updated = await this.prisma.track.update({
       where: { id },
       data,
     });
+
+    // ===== NEW: tạo notification cho artist =====
+    const artistId = await this.getPrimaryArtistIdForTrack(id);
+    if (artistId) {
+      const message = this.buildTrackUpdateMessage(before, updated, body);
+      await this.createNotification({
+        artistId,
+        type: 'TRACK_UPDATED',
+        title: 'Admin đã cập nhật bài hát',
+        message,
+        entity: { type: 'Track', id },
+        payload: {
+          trackId: id,
+          before: {
+            title: before.title ?? null,
+            genre: before.genre ?? null,
+            albumId: before.albumId ?? null,
+            coverUrl: before.coverUrl ?? null,
+            audioUrl: before.audioUrl ?? null,
+          },
+          after: {
+            title: updated.title ?? null,
+            genre: updated.genre ?? null,
+            albumId: updated.albumId ?? null,
+            coverUrl: updated.coverUrl ?? null,
+            audioUrl: updated.audioUrl ?? null,
+          },
+        },
+      });
+    }
+
+    return updated;
   }
 
   // DELETE mềm
   @Delete(':id')
   async softDelete(@Param('id') id: string) {
-    return this.prisma.track.update({
+    const before = await this.prisma.track.findUnique({ where: { id } });
+    if (!before) throw new NotFoundException('Track not found');
+
+    const updated = await this.prisma.track.update({
       where: { id },
       data: { deletedAt: new Date() },
     });
+
+    const artistId = await this.getPrimaryArtistIdForTrack(id);
+    if (artistId) {
+      await this.createNotification({
+        artistId,
+        type: 'TRACK_DELETED',
+        title: 'Bài hát đã bị xoá (xoá mềm)',
+        message: `Admin đã xoá bài hát: "${before.title ?? '(không có tên)'}".`,
+        entity: { type: 'Track', id },
+        payload: { trackId: id, title: before.title ?? null },
+      });
+    }
+
+    return updated;
   }
 
   // GET /admin/tracks/:id

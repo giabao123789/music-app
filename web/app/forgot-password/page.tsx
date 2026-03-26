@@ -68,7 +68,7 @@ export default function ForgotPasswordPage() {
       <div className="relative z-10 mx-auto flex min-h-screen max-w-6xl items-center justify-center px-4 py-10">
         <div className="w-full max-w-md">
           <div className="mb-6 text-center">
-            <div className="text-xs tracking-[0.45em] text-white/60">2</div>
+         
             <div className="mt-2 text-4xl font-extrabold tracking-[0.14em] text-[#ffd1e6] drop-shadow-[0_0_24px_rgba(255,118,188,0.35)]">
               MUSIC WEBSITE
             </div>

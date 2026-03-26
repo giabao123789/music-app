@@ -1,7 +1,7 @@
 // web/app/admin/tracks/page.tsx
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type Role = "USER" | "ARTIST" | "ADMIN";
@@ -27,6 +27,11 @@ type CurrentUser = {
   email: string;
   name: string | null;
   role: Role;
+};
+
+type AlbumOption = {
+  id: string;
+  title: string;
 };
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
@@ -58,6 +63,42 @@ function getAuthToken(): string | null {
 
 const GENRES = ["POP", "RNB", "INDIE", "EDM", "RAP", "BALLAD"] as const;
 
+type ConfirmState =
+  | null
+  | {
+      title: string;
+      description?: string;
+      confirmText?: string;
+      danger?: boolean;
+      onConfirm: () => Promise<void> | void;
+    };
+
+function normalizeAlbumsJson(json: any, artistId: string): AlbumOption[] {
+  const arr: any[] =
+    (Array.isArray(json) && json) ||
+    json?.items ||
+    json?.data ||
+    json?.albums ||
+    json?.rows ||
+    [];
+
+  let albums = (Array.isArray(arr) ? arr : []).map((a) => ({
+    id: String(a?.id ?? a?._id ?? ""),
+    title: String(a?.title ?? a?.name ?? a?.albumTitle ?? ""),
+    _artistId: String(
+      a?.artistId ?? a?.artist_id ?? a?.ownerArtistId ?? ""
+    ),
+  }));
+
+  // ✅ nếu API trả ALL albums → lọc lại theo artistId
+  const filtered = albums.filter((a) => a._artistId === artistId);
+  if (filtered.length) albums = filtered;
+
+  return albums
+    .map(({ id, title }) => ({ id, title }))
+    .filter((a) => a.id && a.title);
+}
+
 export default function AdminTracksPage() {
   const router = useRouter();
 
@@ -72,8 +113,7 @@ export default function AdminTracksPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
-  // ✅ LIMIT: backend của bạn đang trả ~101 items/page => dùng 100 cho chắc
-  // (nếu backend có hỗ trợ limit khác thì bạn đổi lại sau, UI vẫn tính pages đúng)
+  // ✅ LIMIT
   const LIMIT = 100;
 
   // filters
@@ -87,13 +127,23 @@ export default function AdminTracksPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editGenre, setEditGenre] = useState("");
-  const [editAlbum, setEditAlbum] = useState("");
+  const [editAlbum, setEditAlbum] = useState(""); // giữ để không phá UI cũ (hiện text)
+  const [editAlbumId, setEditAlbumId] = useState<string>(""); // ✅ mới: albumId chọn từ dropdown
+
+  // ✅ albums theo artistId (cache)
+  const [albumByArtist, setAlbumByArtist] = useState<Record<string, AlbumOption[]>>({});
+  const [loadingAlbums, setLoadingAlbums] = useState(false);
+  const [albumsError, setAlbumsError] = useState<string | null>(null);
 
   // ✅ upload file cover/audio
   const coverInputRef = useRef<HTMLInputElement | null>(null);
   const audioInputRef = useRef<HTMLInputElement | null>(null);
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [uploadType, setUploadType] = useState<"cover" | "audio" | null>(null);
+
+  // ✅ modal confirm (thay window.confirm)
+  const [confirm, setConfirm] = useState<ConfirmState>(null);
+  const [confirmBusy, setConfirmBusy] = useState(false);
 
   // ==== LOAD USER + CHECK ADMIN ====
   useEffect(() => {
@@ -150,21 +200,20 @@ export default function AdminTracksPage() {
     const items: AdminTrack[] = Array.isArray(data?.items) ? data.items : [];
 
     const t = typeof data?.total === "number" ? data.total : 0;
-
-    // ✅ FIX: totalPages luôn tính từ total + LIMIT để không bị lệch
     const computedPages = Math.max(1, Math.ceil((t || 0) / LIMIT));
 
     setTracks(items);
     setTotal(t);
-    setTotalPages(typeof data?.totalPages === "number" ? data.totalPages : computedPages);
+    setTotalPages(
+      typeof data?.totalPages === "number" ? data.totalPages : computedPages
+    );
 
-    // ✅ nếu đang ở page vượt quá computedPages (vd filter làm giảm total) => kéo về page cuối
     if (computedPages > 0 && page > computedPages) {
       setPage(computedPages);
     }
   };
 
-  // ==== FETCH TRACKS (server-side filter) ====
+  // ==== FETCH TRACKS ====
   useEffect(() => {
     let alive = true;
     const token = getAuthToken();
@@ -202,21 +251,6 @@ export default function AdminTracksPage() {
   // (giữ lại filteredTracks để không phá UI cũ)
   const filteredTracks = useMemo(() => tracks, [tracks]);
 
-  // ==== HELPERS ====
-  const startEdit = (track: AdminTrack) => {
-    setEditingId(track.id);
-    setEditTitle(track.title || "");
-    setEditGenre(track.genre || "");
-    setEditAlbum(track.albumTitle || "");
-  };
-
-  const cancelEdit = () => {
-    setEditingId(null);
-    setEditTitle("");
-    setEditGenre("");
-    setEditAlbum("");
-  };
-
   const refreshTracks = async () => {
     try {
       await fetchTracks();
@@ -225,24 +259,93 @@ export default function AdminTracksPage() {
     }
   };
 
+  // ✅ fetch albums by artist (tự thử nhiều endpoint phổ biến)
+const fetchAlbumsByArtist = async (artistId: string) => {
+    if (!artistId || albumByArtist[artistId]) return;
+
+    const token = getAuthToken();
+    if (!token) return;
+
+    setLoadingAlbums(true);
+    setAlbumsError(null);
+
+    const ENDPOINTS = [
+      `${API_BASE}/artist/${artistId}/albums`,
+      `${API_BASE}/albums?artistId=${artistId}`,
+      `${API_BASE}/albums`,
+    ];
+
+    try {
+      for (const url of ENDPOINTS) {
+        const res = await fetch(url, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) continue;
+
+        const json = await res.json();
+        const albums = normalizeAlbumsJson(json, artistId);
+
+        setAlbumByArtist((p) => ({ ...p, [artistId]: albums }));
+        if (!albums.length) {
+          setAlbumsError("Nghệ sĩ chưa có album.");
+        }
+        return;
+      }
+      setAlbumByArtist((p) => ({ ...p, [artistId]: [] }));
+    } finally {
+      setLoadingAlbums(false);
+    }
+  };
+
+
+  // ==== HELPERS ====
+  const startEdit = (track: AdminTrack) => {
+    setEditingId(track.id);
+    setEditTitle(track.title || "");
+    setEditGenre(track.genre || "");
+    setEditAlbum(track.albumTitle || "");
+
+    // reset album pick
+    setEditAlbumId("");
+
+    // ✅ load albums cho đúng artist
+    if (track.artistId) {
+      fetchAlbumsByArtist(track.artistId);
+    } else {
+      setAlbumsError("Track này thiếu artistId nên không load được album.");
+    }
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditTitle("");
+    setEditGenre("");
+    setEditAlbum("");
+    setEditAlbumId("");
+    setAlbumsError(null);
+  };
+
   // ==== ACTIONS ====
   const handleSaveEdit = async (trackId: string) => {
     const token = getAuthToken();
     if (!token) return;
 
     try {
+      const payload: any = {
+        title: editTitle,
+        genre: editGenre || null,
+      };
+
+      // ✅ nếu chọn album => gửi albumId (không chọn thì thôi để khỏi phá)
+      if (editAlbumId) payload.albumId = editAlbumId;
+
       const res = await fetch(`${API_BASE}/admin/tracks/${trackId}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          title: editTitle,
-          genre: editGenre || null,
-          // NOTE: backend hiện đang nhận albumId, bạn đang edit albumTitle -> giữ nguyên để không phá UI
-          // albumId: null,
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) {
@@ -289,36 +392,42 @@ export default function AdminTracksPage() {
     }
   };
 
-  const handleDelete = async (track: AdminTrack) => {
-    if (
-      !window.confirm(
-        `Bạn chắc chắn muốn xoá bài "${track.title}"? Hành động này không thể hoàn tác.`,
-      )
-    )
-      return;
+  // ✅ confirm modal đẹp thay window.confirm
+  const openDeleteConfirm = (track: AdminTrack) => {
+    setConfirm({
+      title: "Xoá bài hát này?",
+      description: `Bạn chắc chắn muốn xoá bài "${track.title}"? Hành động này không thể hoàn tác.`,
+      confirmText: "Xoá",
+      danger: true,
+      onConfirm: async () => {
+        const token = getAuthToken();
+        if (!token) return;
 
-    const token = getAuthToken();
-    if (!token) return;
+        try {
+          setConfirmBusy(true);
 
-    try {
-      const res = await fetch(`${API_BASE}/admin/tracks/${track.id}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
+          const res = await fetch(`${API_BASE}/admin/tracks/${track.id}`, {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${token}` },
+          });
 
-      if (!res.ok) {
-        const txt = await res.text().catch(() => "");
-        console.error("Delete track failed", res.status, txt);
-        alert("Xoá bài hát không thành công.");
-        return;
-      }
+          if (!res.ok) {
+            const txt = await res.text().catch(() => "");
+            console.error("Delete track failed", res.status, txt);
+            alert("Xoá bài hát không thành công.");
+            return;
+          }
 
-      // ✅ UX mượt + đồng bộ với server
-      setTracks((prev) => prev.filter((t) => t.id !== track.id));
-      await refreshTracks();
-    } catch (err) {
-      console.error("Delete track error", err);
-    }
+          setTracks((prev) => prev.filter((t) => t.id !== track.id));
+          await refreshTracks();
+        } catch (err) {
+          console.error("Delete track error", err);
+        } finally {
+          setConfirmBusy(false);
+          setConfirm(null);
+        }
+      },
+    });
   };
 
   // ====== UPLOAD HELPERS (cover/audio) ======
@@ -329,7 +438,6 @@ export default function AdminTracksPage() {
     const fd = new FormData();
     fd.append("file", file);
 
-    // ✅ dùng endpoint có sẵn của bạn
     const uploadUrl =
       type === "cover"
         ? `${API_BASE}/artist/me/upload-cover`
@@ -377,7 +485,6 @@ export default function AdminTracksPage() {
   const openCoverPicker = (trackId: string) => {
     setUploadingId(trackId);
     setUploadType("cover");
-    // reset value để chọn lại cùng 1 file vẫn trigger onChange
     if (coverInputRef.current) coverInputRef.current.value = "";
     coverInputRef.current?.click();
   };
@@ -389,7 +496,7 @@ export default function AdminTracksPage() {
     audioInputRef.current?.click();
   };
 
-  const onPickCoverFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const onPickCoverFile = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     const trackId = uploadingId;
     if (!file || !trackId) return;
@@ -409,7 +516,7 @@ export default function AdminTracksPage() {
     }
   };
 
-  const onPickAudioFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const onPickAudioFile = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     const trackId = uploadingId;
     if (!file || !trackId) return;
@@ -483,9 +590,7 @@ export default function AdminTracksPage() {
           <p className="text-sm text-white/70 mt-2">
             Filter theo genre / artist / ngày tạo, tìm kiếm toàn bộ DB, và quản lý trực tiếp từng track.
           </p>
-          <p className="text-[11px] text-white/45 mt-1">
-            Đang dùng limit={LIMIT} / trang (tính trang theo total từ API).
-          </p>
+          
         </div>
 
         {/* FILTER BAR */}
@@ -562,17 +667,12 @@ export default function AdminTracksPage() {
             <div className="text-xs text-white/60">
               Đang hiển thị:{" "}
               <span className="text-white/80">{filteredTracks.length}</span>{" "}
-              tracks (trang {page}/{totalPages}) • Tổng DB theo API:{" "}
+              tracks (trang {page}/{totalPages}) • Tổng bài hát:{" "}
               <span className="text-white/80">{total}</span>
             </div>
 
             <div className="flex items-center gap-2">
-              <button
-                onClick={refreshTracks}
-                className="px-3 py-2 rounded-xl border border-white/10 text-sm hover:border-[#4cc9f0]/40"
-              >
-                Reload
-              </button>
+              
 
               <button
                 onClick={resetFilters}
@@ -623,6 +723,8 @@ export default function AdminTracksPage() {
           {!loading &&
             filteredTracks.map((track) => {
               const isEditing = editingId === track.id;
+              const artistId = track.artistId || "";
+              const albums = artistId ? albumByArtist[artistId] || [] : [];
 
               return (
                 <div
@@ -633,7 +735,6 @@ export default function AdminTracksPage() {
                   <div className="flex-shrink-0">
                     <div className="w-16 h-16 rounded-xl overflow-hidden border border-white/10 bg-black/40 flex items-center justify-center">
                       {track.coverUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={resolveMediaUrl(track.coverUrl)}
                           alt={track.title}
@@ -648,28 +749,62 @@ export default function AdminTracksPage() {
                   {/* INFO + EDIT */}
                   <div className="flex-1 min-w-0 space-y-1">
                     {isEditing ? (
-                      <>
-                        <input
-                          className="w-full bg-black/40 border border-white/15 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-[#4cc9f0]"
-                          value={editTitle}
-                          onChange={(e) => setEditTitle(e.target.value)}
-                          placeholder="Tên bài hát"
-                        />
-                        <div className="flex flex-col sm:flex-row gap-2">
-                          <input
-                            className="flex-1 bg-black/40 border border-white/15 rounded-lg px-3 py-1.5 text-xs outline-none focus:ring-1 focus:ring-[#4cc9f0]"
-                            value={editGenre}
-                            onChange={(e) => setEditGenre(e.target.value)}
-                            placeholder="Thể loại (genre)"
-                          />
-                          <input
-                            className="flex-1 bg-black/40 border border-white/15 rounded-lg px-3 py-1.5 text-xs outline-none focus:ring-1 focus:ring-[#4cc9f0]"
-                            value={editAlbum}
-                            onChange={(e) => setEditAlbum(e.target.value)}
-                            placeholder="Album"
-                          />
+                      <div className="rounded-2xl border border-cyan-400/25 bg-[radial-gradient(80%_80%_at_10%_0%,rgba(76,201,240,0.14),transparent_60%),radial-gradient(60%_60%_at_100%_20%,rgba(168,85,247,0.12),transparent_55%),linear-gradient(to_bottom,rgba(2,6,23,0.55),rgba(2,6,23,0.85))] p-3 shadow-[0_0_30px_rgba(76,201,240,0.18)]">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="text-[11px] text-white/60">
+                            Đang chỉnh sửa •{" "}
+                            <span className="font-mono text-white/70">{track.id}</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-[10px]">
+                            <span className="rounded-full border border-cyan-300/25 bg-cyan-400/10 px-2 py-0.5 text-cyan-200">
+                              EDIT MODE
+                            </span>
+                          </div>
                         </div>
-                      </>
+
+                        <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-12">
+                          <div className="sm:col-span-6">
+                            <label className="block text-[11px] text-white/55 mb-1">
+                              Tên bài hát
+                            </label>
+                            <input
+                              className="w-full rounded-xl bg-black/35 border border-cyan-400/20 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#4cc9f0]/50 focus:border-[#4cc9f0]/40"
+                              value={editTitle}
+                              onChange={(e) => setEditTitle(e.target.value)}
+                              placeholder="Nhập tên bài..."
+                            />
+                          </div>
+
+                          <div className="sm:col-span-3">
+                            <label className="block text-[11px] text-white/55 mb-1">
+                              Genre
+                            </label>
+                            <select
+                              value={editGenre}
+                              onChange={(e) => setEditGenre(e.target.value)}
+                              className="w-full rounded-xl bg-black/35 border border-cyan-400/20 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#4cc9f0]/45 focus:border-[#4cc9f0]/40"
+                            >
+                              <option value="">(Trống)</option>
+                              {GENRES.map((g) => (
+                                <option key={g} value={g}>
+                                  {g}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          {/* ✅ Album dropdown */}
+                         
+                        </div>
+
+                        {albumsError && (
+                          <div className="mt-2 text-[11px] text-amber-200/90">
+                            {albumsError}
+                          </div>
+                        )}
+
+                        
+                      </div>
                     ) : (
                       <>
                         <div className="flex items-center gap-2">
@@ -716,9 +851,7 @@ export default function AdminTracksPage() {
                           {typeof track.popularity === "number" && (
                             <span>
                               Lượt nghe:{" "}
-                              <span className="text-white/70">
-                                {track.popularity}
-                              </span>
+                              <span className="text-white/70">{track.popularity}</span>
                             </span>
                           )}
                         </p>
@@ -732,13 +865,13 @@ export default function AdminTracksPage() {
                       <>
                         <button
                           onClick={() => handleSaveEdit(track.id)}
-                          className="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500 hover:bg-emerald-400 text-black shadow-md shadow-emerald-500/40"
+                          className="px-3 py-1 rounded-full text-xs font-semibold bg-gradient-to-r from-emerald-400 to-cyan-300 text-black shadow-[0_0_22px_rgba(52,211,153,0.25)] hover:opacity-95"
                         >
                           Lưu
                         </button>
                         <button
                           onClick={cancelEdit}
-                          className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-600 hover:bg-slate-500 text-white"
+                          className="px-3 py-1 rounded-full text-xs font-semibold border border-white/15 bg-white/5 hover:bg-white/10 text-white"
                         >
                           Hủy
                         </button>
@@ -747,25 +880,12 @@ export default function AdminTracksPage() {
                       <>
                         <button
                           onClick={() => startEdit(track)}
-                          className="rounded-full border border-cyan-400/40 bg-cyan-500/10 px-3 py-1.5 text-xs text-cyan-100
-                 hover:bg-cyan-500/20 hover:border-cyan-300"
+                          className="rounded-full border border-cyan-300/25 bg-cyan-400/10 px-3 py-1.5 text-xs text-cyan-100 hover:bg-cyan-400/15 hover:border-cyan-200/40 shadow-[0_0_18px_rgba(76,201,240,0.12)]"
                         >
                           Sửa
                         </button>
 
-                        <button
-                          onClick={() => handleToggleBlock(track)}
-                          className={
-                            "px-3 py-1 rounded-full text-xs font-semibold shadow-md " +
-                            (track.isBlocked
-                              ? "bg-amber-500 hover:bg-amber-400 text-black shadow-amber-500/40"
-                              : "bg-red-500 hover:bg-red-400 text-white shadow-red-500/40")
-                          }
-                        >
-                          {track.isBlocked ? "Mở khoá" : "Khoá"}
-                        </button>
 
-                        {/* ✅ Đổi cover bằng upload file */}
                         <button
                           onClick={() => openCoverPicker(track.id)}
                           className="px-3 py-1 rounded-full text-xs font-semibold bg-purple-500 hover:bg-purple-400 text-white shadow-md shadow-purple-500/40"
@@ -774,7 +894,6 @@ export default function AdminTracksPage() {
                           Đổi cover
                         </button>
 
-                        {/* ✅ Đổi audio bằng upload file */}
                         <button
                           onClick={() => openAudioPicker(track.id)}
                           className="px-3 py-1 rounded-full text-xs font-semibold bg-indigo-500 hover:bg-indigo-400 text-white shadow-md shadow-indigo-500/40"
@@ -784,7 +903,7 @@ export default function AdminTracksPage() {
                         </button>
 
                         <button
-                          onClick={() => handleDelete(track)}
+                          onClick={() => openDeleteConfirm(track)}
                           className="px-3 py-1 rounded-full text-xs font-semibold bg-red-700 hover:bg-red-600 text-white shadow-md shadow-red-700/40"
                         >
                           Xoá
@@ -797,6 +916,70 @@ export default function AdminTracksPage() {
             })}
         </div>
       </div>
+
+      {/* ===== Modal confirm đẹp (thay window.confirm) ===== */}
+      {confirm && (
+        <div className="fixed inset-0 z-[999] flex items-center justify-center px-4">
+          <div
+            className="absolute inset-0 bg-black/75 backdrop-blur-sm"
+            onClick={() => (!confirmBusy ? setConfirm(null) : null)}
+          />
+          <div className="relative w-full max-w-md rounded-2xl border border-cyan-300/20 bg-slate-950/85 p-4 shadow-[0_0_55px_rgba(76,201,240,0.16)]">
+            <div className="pointer-events-none absolute -top-20 left-1/2 h-44 w-72 -translate-x-1/2 rounded-full bg-cyan-400/10 blur-3xl" />
+            <div className="pointer-events-none absolute -bottom-24 right-0 h-56 w-56 rounded-full bg-violet-500/10 blur-3xl" />
+
+            <div className="relative flex items-start justify-between gap-3">
+              <div>
+                <div className="text-base font-semibold text-white">
+                  {confirm.title}
+                </div>
+                {confirm.description && (
+                  <div className="mt-1 text-xs text-slate-300 whitespace-pre-line">
+                    {confirm.description}
+                  </div>
+                )}
+              </div>
+              <button
+                className="rounded-full border border-cyan-300/20 bg-slate-900/40 px-2 py-1 text-xs text-slate-200 hover:bg-slate-900/60"
+                onClick={() => (!confirmBusy ? setConfirm(null) : null)}
+                title="Đóng"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="relative mt-4 flex items-center justify-end gap-2">
+              <button
+                className="rounded-full border border-cyan-300/15 bg-slate-900/35 px-4 py-2 text-xs text-slate-200 hover:bg-slate-900/55 disabled:opacity-50"
+                disabled={confirmBusy}
+                onClick={() => setConfirm(null)}
+              >
+                Huỷ
+              </button>
+
+              <button
+                className={[
+                  "rounded-full px-4 py-2 text-xs font-semibold disabled:opacity-50",
+                  confirm.danger
+                    ? "bg-rose-500/90 text-white hover:bg-rose-500 shadow-[0_0_22px_rgba(244,63,94,0.18)]"
+                    : "bg-gradient-to-r from-cyan-300 to-violet-300 text-slate-950 hover:opacity-95 shadow-[0_0_22px_rgba(76,201,240,0.16)]",
+                ].join(" ")}
+                disabled={confirmBusy}
+                onClick={async () => {
+                  try {
+                    setConfirmBusy(true);
+                    await confirm.onConfirm();
+                  } finally {
+                    setConfirmBusy(false);
+                  }
+                }}
+              >
+                {confirmBusy ? "Đang xử lý..." : confirm.confirmText || "OK"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

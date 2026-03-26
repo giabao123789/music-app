@@ -14,7 +14,7 @@ import { AdminModule } from './admin/admin.module';
 import { AlbumsModule } from './albums/albums.module';
 import { FollowsModule } from './follows/follows.module';
 import { CommentsModule } from './comments/comments.module';
-
+import { NotificationsModule } from './notifications/notifications.module';
 @Module({
   imports: [
     AlbumsModule,
@@ -30,6 +30,7 @@ import { CommentsModule } from './comments/comments.module';
     FollowsModule,
     CommentsModule,
     RecommendationsModule,
+    NotificationsModule,
 
   ],
   // ❌ Tuyệt đối KHÔNG dùng APP_GUARD ở đây

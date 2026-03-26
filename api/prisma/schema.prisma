@@ -176,3 +176,12 @@ model Comment {
   user  User  @relation(fields: [userId], references: [id])
   track Track @relation(fields: [trackId], references: [id])
 }
+model Notification {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   // id của nghệ sĩ (User)
+  title     String
+  message   String
+  type      String   // TRACK, ARTIST, ALBUM, SYSTEM
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}

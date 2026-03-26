@@ -59,6 +59,172 @@ export class ArtistService {
     return this.ensureArtistProfile(userId);
   }
 
+  // ✅ NEW: Overview cho web/app/artist/page.tsx (fix 404 /artist/me/overview)
+  async getOverview(userId: string) {
+    const artist = await this.ensureArtistProfile(userId);
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, name: true },
+    });
+
+    const tracks = await this.prisma.track.findMany({
+      where: {
+        artistId: artist.id,
+        OR: [{ deletedAt: null }, { deletedAt: { isSet: false } }],
+      },
+      select: { duration: true , popularity: true,},
+    });
+
+    const totalTracks = tracks.length;
+    const totalDuration = tracks.reduce(
+      (sum, t) => sum + (Number((t as any).duration ?? 0) || 0),
+      0,
+    );
+ const totalPlays = tracks.reduce(
+    (sum, t) => sum + (Number((t as any).popularity ?? 0) || 0),
+    0,
+  );
+    return {
+      artist: { id: artist.id, name: artist.name, avatar: artist.avatar ?? null,totalPlays,  },
+      user: user ?? null,
+      stats: { totalTracks, totalDuration, totalPlays, },
+    };
+  }
+
+  // ✅ NEW: Notifications (Mongo collection "Notification" tự tạo)
+  async myNotifications(
+    userId: string,
+    opts?: { onlyUnread?: boolean; limit?: number },
+  ) {
+    const artist = await this.ensureArtistProfile(userId);
+    const limit = Math.min(Math.max(opts?.limit ?? 20, 1), 100);
+    const onlyUnread = !!opts?.onlyUnread;
+
+    const filter: any = { artistId: artist.id };
+    if (onlyUnread) filter.readAt = null;
+
+    let docs: any[] = [];
+    try {
+      const res: any = await (this.prisma as any).$runCommandRaw({
+        find: 'Notification',
+        filter,
+        sort: { createdAt: -1 },
+        limit,
+      });
+      docs = res?.cursor?.firstBatch ?? [];
+    } catch {
+      docs = [];
+    }
+
+    const items = docs.map((d) => ({
+      id: String(d?._id),
+      artistId: d?.artistId ?? null,
+      type: d?.type ?? null,
+      title: d?.title ?? '',
+      message: d?.message ?? '',
+      entity: d?.entity ?? null,
+      payload: d?.payload ?? null,
+      createdAt: d?.createdAt ?? null,
+      readAt: d?.readAt ?? null,
+      isRead: !!d?.readAt,
+    }));
+
+    const unreadCount = items.filter((x) => !x.isRead).length;
+
+    return { items, unreadCount };
+  }
+
+  // ✅ NEW: Mark 1 notification read
+  async markNotificationRead(userId: string, notificationId: string) {
+    const artist = await this.ensureArtistProfile(userId);
+    if (!notificationId) {
+      throw new BadRequestException('notificationId is required');
+    }
+
+    try {
+      await (this.prisma as any).$runCommandRaw({
+        update: 'Notification',
+        updates: [
+          {
+            q: { _id: notificationId, artistId: artist.id },
+            u: { $set: { readAt: new Date() } },
+            multi: false,
+          },
+        ],
+      });
+    } catch {
+      // ignore (không phá chức năng khác)
+    }
+
+    return { ok: true, id: notificationId };
+  }
+
+  // ✅ NEW: read-all (fix 404 PATCH /artist/me/notifications/read-all)
+  async readAllNotifications(userId: string) {
+    const artist = await this.ensureArtistProfile(userId);
+
+    try {
+      await (this.prisma as any).$runCommandRaw({
+        update: 'Notification',
+        updates: [
+          {
+            q: { artistId: artist.id, readAt: null },
+            u: { $set: { readAt: new Date() } },
+            multi: true,
+          },
+        ],
+      });
+    } catch {
+      // ignore
+    }
+
+    return { ok: true };
+  }
+ async deleteNotification(userId: string, notificationId: string) {
+    const artist = await this.ensureArtistProfile(userId);
+    if (!notificationId) {
+      throw new BadRequestException('notificationId is required');
+    }
+
+    try {
+      await (this.prisma as any).$runCommandRaw({
+        delete: 'Notification',
+        deletes: [{ q: { _id: notificationId, artistId: artist.id }, limit: 1 }],
+      });
+    } catch {
+      // ignore
+    }
+
+    return { ok: true, id: notificationId };
+  }
+
+  async deleteAllNotifications(userId: string) {
+    const artist = await this.ensureArtistProfile(userId);
+
+    let deleted = 0;
+    try {
+      const countRes: any = await (this.prisma as any).$runCommandRaw({
+        count: 'Notification',
+        query: { artistId: artist.id },
+      });
+      deleted = typeof countRes?.n === 'number' ? countRes.n : 0;
+    } catch {
+      deleted = 0;
+    }
+
+    try {
+      await (this.prisma as any).$runCommandRaw({
+        delete: 'Notification',
+        deletes: [{ q: { artistId: artist.id }, limit: 0 }],
+      });
+    } catch {
+      // ignore
+    }
+
+    return { ok: true, deleted };
+  }
+
   // ✅ FIX: lấy track chưa bị xoá mềm (deletedAt null OR missing)
   async myTracks(userId: string) {
     const artist = await this.ensureArtistProfile(userId);
@@ -96,7 +262,6 @@ export class ArtistService {
         return null;
       };
 
-      // ✅ FIX: deletedAt null OR not exists
       const res: any = await (this.prisma as any).$runCommandRaw({
         find: 'Track',
         filter: {
@@ -146,7 +311,7 @@ export class ArtistService {
   async myFollowers(userId: string) {
     const artist = await this.ensureArtistProfile(userId);
 
-    // 1) Thử Prisma trước (nhanh + đúng kiểu)
+    // 1) Thử Prisma trước
     try {
       const rows = await (this.prisma as any).follow.findMany({
         where: { artistId: artist.id },
@@ -301,14 +466,7 @@ export class ArtistService {
         ? body.duration
         : 0;
 
-    const allowedGenres = new Set([
-      'POP',
-      'RNB',
-      'INDIE',
-      'EDM',
-      'RAP',
-      'BALLAD',
-    ]);
+    const allowedGenres = new Set(['POP', 'RNB', 'INDIE', 'EDM', 'RAP', 'BALLAD']);
 
     const genre =
       typeof body.genre === 'string' && allowedGenres.has(body.genre.trim())
@@ -355,7 +513,7 @@ export class ArtistService {
       where: { id: trackId },
     });
 
-    if (!track || track.artistId !== artist.id) {
+    if (!track || (track as any).artistId !== artist.id) {
       throw new NotFoundException('Track not found');
     }
 
@@ -511,14 +669,7 @@ export class ArtistService {
 
     const createdTracks: any[] = [];
 
-    const allowedGenres = new Set([
-      'POP',
-      'RNB',
-      'INDIE',
-      'EDM',
-      'RAP',
-      'BALLAD',
-    ]);
+    const allowedGenres = new Set(['POP', 'RNB', 'INDIE', 'EDM', 'RAP', 'BALLAD']);
 
     if (Array.isArray(body.tracks)) {
       for (const t of body.tracks) {
@@ -598,7 +749,7 @@ export class ArtistService {
       where: { id: albumId },
     });
 
-    if (!album || album.artistId !== artist.id) {
+    if (!album || (album as any).artistId !== artist.id) {
       throw new NotFoundException('Album not found');
     }
 
@@ -631,6 +782,88 @@ export class ArtistService {
     });
   }
 
+  async deleteAlbum(userId: string, albumId: string) {
+    const artist = await this.ensureArtistProfile(userId);
+
+    const album = await this.prisma.album.findUnique({
+      where: { id: albumId },
+    });
+
+    if (!album || (album as any).artistId !== artist.id) {
+      throw new NotFoundException('Album not found');
+    }
+
+    await this.prisma.track.updateMany({
+      where: { albumId: (album as any).id, artistId: artist.id },
+      data: { albumId: null },
+    });
+
+    await this.prisma.album.delete({
+      where: { id: (album as any).id },
+    });
+
+    return { success: true };
+  }
+
+  /**
+   * Reorder tracks trong album (KHÔNG đổi schema).
+   */
+  async reorderAlbumTracks(userId: string, albumId: string, body: any) {
+    const artist = await this.ensureArtistProfile(userId);
+
+    if (!albumId) {
+      throw new BadRequestException('albumId is required');
+    }
+
+    const ids: string[] =
+      (Array.isArray(body?.trackIds) && body.trackIds) ||
+      (Array.isArray(body?.orderedTrackIds) && body.orderedTrackIds) ||
+      (Array.isArray(body?.ids) && body.ids) ||
+      [];
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      throw new BadRequestException('trackIds is required');
+    }
+
+    const album = await this.prisma.album.findUnique({
+      where: { id: albumId },
+    });
+
+    if (!album || (album as any).artistId !== artist.id) {
+      throw new NotFoundException('Album not found');
+    }
+
+    const tracks = await this.prisma.track.findMany({
+      where: {
+        id: { in: ids },
+        albumId: albumId,
+        artistId: artist.id,
+      },
+      include: {
+        artist: true,
+        album: true,
+      },
+    });
+
+    const foundSet = new Set(tracks.map((t) => t.id));
+    const missing = ids.filter((id) => !foundSet.has(id));
+    if (missing.length) {
+      throw new BadRequestException(
+        `Some tracks are invalid or not in this album: ${missing.join(', ')}`,
+      );
+    }
+
+    const byId = new Map(tracks.map((t) => [t.id, t]));
+    const ordered = ids.map((id) => byId.get(id)!);
+
+    return { success: true, albumId, tracks: ordered };
+  }
+
+  // NOTE: updateTrackAlbum hiện đang được controller gọi
+  async updateTrackAlbum(userId: string, trackId: string, body: any) {
+    return this.updateTrack(userId, trackId, body);
+  }
+
   // ========== PUBLIC ROUTES (USER) ==========
 
   async listArtists() {
@@ -656,7 +889,6 @@ export class ArtistService {
       ),
     );
 
-    // ✅ FIX: count track trực tiếp (not deleted) + track qua TrackArtist
     const tracksCounts = await Promise.all(
       artists.map(async (a) => {
         // 1) track trực tiếp
@@ -698,7 +930,6 @@ export class ArtistService {
           }
         }
 
-        // giữ logic hiển thị đủ lớn (tránh bị thiếu)
         return Math.max(direct, direct + join);
       }),
     );
@@ -708,14 +939,13 @@ export class ArtistService {
       name: a.name,
       avatar: a.avatar,
       mainGenre: a.mainGenre,
-      tracksCount: tracksCounts[idx] ?? a._count.tracks,
-      albumsCount: a._count.albums,
+      tracksCount: tracksCounts[idx] ?? (a as any)._count?.tracks,
+      albumsCount: (a as any)._count?.albums,
       followersCount: followersCounts[idx],
     }));
   }
 
-  // ✅ FIX: artist detail = union(direct Track.artistId + TrackArtist) và notDeleted = null OR missing
-  async getArtistById(id: string) {
+ async getArtistById(id: string) {
     try {
       const artist = await this.prisma.artist.findUnique({
         where: { id },
@@ -941,87 +1171,5 @@ export class ArtistService {
         }),
       };
     }
-  }
-
-  async deleteAlbum(userId: string, albumId: string) {
-    const artist = await this.ensureArtistProfile(userId);
-
-    const album = await this.prisma.album.findUnique({
-      where: { id: albumId },
-    });
-
-    if (!album || album.artistId !== artist.id) {
-      throw new NotFoundException('Album not found');
-    }
-
-    await this.prisma.track.updateMany({
-      where: { albumId: album.id, artistId: artist.id },
-      data: { albumId: null },
-    });
-
-    await this.prisma.album.delete({
-      where: { id: album.id },
-    });
-
-    return { success: true };
-  }
-
-  /**
-   * Reorder tracks trong album (KHÔNG đổi schema).
-   */
-  async reorderAlbumTracks(userId: string, albumId: string, body: any) {
-    const artist = await this.ensureArtistProfile(userId);
-
-    if (!albumId) {
-      throw new BadRequestException('albumId is required');
-    }
-
-    const ids: string[] =
-      (Array.isArray(body?.trackIds) && body.trackIds) ||
-      (Array.isArray(body?.orderedTrackIds) && body.orderedTrackIds) ||
-      (Array.isArray(body?.ids) && body.ids) ||
-      [];
-
-    if (!Array.isArray(ids) || ids.length === 0) {
-      throw new BadRequestException('trackIds is required');
-    }
-
-    const album = await this.prisma.album.findUnique({
-      where: { id: albumId },
-    });
-
-    if (!album || album.artistId !== artist.id) {
-      throw new NotFoundException('Album not found');
-    }
-
-    const tracks = await this.prisma.track.findMany({
-      where: {
-        id: { in: ids },
-        albumId: albumId,
-        artistId: artist.id,
-      },
-      include: {
-        artist: true,
-        album: true,
-      },
-    });
-
-    const foundSet = new Set(tracks.map((t) => t.id));
-    const missing = ids.filter((id) => !foundSet.has(id));
-    if (missing.length) {
-      throw new BadRequestException(
-        `Some tracks are invalid or not in this album: ${missing.join(', ')}`,
-      );
-    }
-
-    const byId = new Map(tracks.map((t) => [t.id, t]));
-    const ordered = ids.map((id) => byId.get(id)!);
-
-    return { success: true, albumId, tracks: ordered };
-  }
-
-  // NOTE: updateTrackAlbum hiện đang được controller gọi
-  async updateTrackAlbum(userId: string, trackId: string, body: any) {
-    return this.updateTrack(userId, trackId, body);
   }
 }

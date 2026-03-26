@@ -233,16 +233,25 @@ export default function TrackCard({ track, onHoverStart, onHoverEnd }: Props) {
                 </span>
               )}
 
-              {/* 👂 lượt nghe - hiện cho mọi role */}
+              {/*  lượt nghe - hiện cho mọi role */}
               {popularity !== null && (
-                <span className="inline-flex items-center gap-1 rounded-full border border-sky-400/30 bg-slate-950/40 px-2 py-0.5 text-[11px] text-sky-200 shadow-[0_0_18px_rgba(56,189,248,0.18)]">
-                  <span className="opacity-80">👂</span>
-                  <span className="font-semibold">
-                    {popularity.toLocaleString("vi-VN")}
-                  </span>
-                  <span className="opacity-70">lượt nghe</span>
-                </span>
-              )}
+  <span className="inline-flex items-center gap-1 rounded-full border border-sky-400/30 bg-slate-950/40 px-2 py-0.5 text-[11px] text-sky-200 shadow-[0_0_18px_rgba(56,189,248,0.18)]">
+    
+    {/* Icon hình */}
+    <img
+      src="/icons/play.png"
+      alt="plays"
+      className="h-3 w-3 opacity-80"
+    />
+
+    <span className="font-semibold">
+      {popularity.toLocaleString("vi-VN")}
+    </span>
+
+    <span className="opacity-70">lượt nghe</span>
+  </span>
+)}
+
 
               {/* ✅ CHANGED: mm:ss thay vì "Xs" */}
               <span className="text-xs text-slate-200 tabular-nums">

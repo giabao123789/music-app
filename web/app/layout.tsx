@@ -4,6 +4,7 @@ import PlayerProvider from "./providers/PlayerProvider";
 import ToastProvider from "@/components/ToastProvider";
 import AuthProvider from "./providers/AuthProvider";
 import Shell from "./Shell";
+import ConfirmProvider from "@/components/ConfirmProvider"; // ✅ THÊM DÒNG NÀY
 
 export const metadata = {
   title: "Music Player",
@@ -27,7 +28,10 @@ export default function RootLayout({
         <AuthProvider>
           <ToastProvider>
             <PlayerProvider>
-              <Shell>{children}</Shell>
+              {/* ✅ BỌC Ở ĐÂY */}
+              <ConfirmProvider>
+                <Shell>{children}</Shell>
+              </ConfirmProvider>
             </PlayerProvider>
           </ToastProvider>
         </AuthProvider>

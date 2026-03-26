@@ -80,6 +80,32 @@ async function getAudioDurationSeconds(file: File): Promise<number> {
   });
 }
 
+/** ✅ NEW: hiển thị phút:giây (mm:ss) nhưng vẫn lưu GIÂY để gửi backend */
+function secondsToMMSS(secLike: string | number | null | undefined) {
+  const sec = Math.max(0, Number(secLike ?? 0) || 0);
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+/** nhận "m:s" | "mm:ss" | "120" => trả về giây (number) */
+function mmssToSeconds(input: string) {
+  const raw = (input ?? "").trim();
+
+  // nếu user nhập số giây luôn
+  if (/^\d+$/.test(raw)) return Math.max(0, parseInt(raw, 10));
+
+  // dạng m:s hoặc mm:ss
+  const m = raw.match(/^(\d+)\s*:\s*(\d{1,2})$/);
+  if (!m) return NaN;
+
+  const minutes = parseInt(m[1], 10);
+  const seconds = parseInt(m[2], 10);
+  if (Number.isNaN(minutes) || Number.isNaN(seconds) || seconds > 59) return NaN;
+
+  return Math.max(0, minutes * 60 + seconds);
+}
+
 /** ✅ Danh sách thể loại (KHÔNG có OTHER/Khác) */
 const GENRES = [
   { value: "POP", label: "Pop" },
@@ -113,7 +139,12 @@ type BatchTrackItem = {
 
   title: string;
   genre: string; // "" | valid
+
+  // ✅ vẫn lưu giây để gửi backend
   duration: string; // number string | ""
+  // ✅ UI nhập theo mm:ss (để gõ không bị giật)
+  durationMMSS?: string;
+
   lyrics: string; // optional
 };
 
@@ -149,7 +180,12 @@ export function UploadTrackForm({
   const [title, setTitle] = useState("");
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [coverFile, setCoverFile] = useState<File | null>(null);
+
+  // ✅ vẫn lưu GIÂY
   const [duration, setDuration] = useState("");
+  // ✅ UI mm:ss
+  const [durationMMSS, setDurationMMSS] = useState("");
+
   const [lyrics, setLyrics] = useState("");
   const [genre, setGenre] = useState<string>("");
 
@@ -175,6 +211,7 @@ export function UploadTrackForm({
     setAudioFile(null);
     setCoverFile(null);
     setDuration("");
+    setDurationMMSS("");
     setLyrics("");
     setGenre("");
   };
@@ -213,6 +250,7 @@ export function UploadTrackForm({
           title: titleFromFileName(f),
           genre: "",
           duration: "",
+          durationMMSS: "",
           lyrics: "",
         });
 
@@ -221,10 +259,16 @@ export function UploadTrackForm({
           (async () => {
             const sec = await getAudioDurationSeconds(f);
             if (sec > 0) {
-              // update sau khi state đã có item
+              const rounded = Math.round(sec);
               setBatchItems((cur) =>
                 cur.map((it) =>
-                  it.key === key ? { ...it, duration: String(Math.round(sec)) } : it
+                  it.key === key
+                    ? {
+                        ...it,
+                        duration: String(rounded),
+                        durationMMSS: secondsToMMSS(rounded),
+                      }
+                    : it
                 )
               );
             }
@@ -252,8 +296,9 @@ export function UploadTrackForm({
     if (!coverFile) return "Vui lòng chọn ảnh cover.";
     if (forceAlbumSelect && !albumId) return "Vui lòng chọn album cho bài hát này.";
 
-    if (genre && !GENRE_VALUES.has(genre)) return "Thể loại không hợp lệ.";
+    if (genre && !GENRE_VALUES.has(genre as any)) return "Thể loại không hợp lệ.";
 
+    // ✅ validate GIÂY (duration state) - không đổi backend
     if (enableDuration && duration.trim()) {
       const n = Number(duration.trim());
       if (!Number.isFinite(n) || n < 0) return "Thời lượng (giây) không hợp lệ.";
@@ -274,7 +319,7 @@ export function UploadTrackForm({
       if (!it.title.trim()) return `Track ${idx}: thiếu Title`;
       if (!it.coverFile) return `Track ${idx}: thiếu Cover`;
 
-      if (it.genre && !GENRE_VALUES.has(it.genre)) return `Track ${idx}: Genre không hợp lệ`;
+      if (it.genre && !GENRE_VALUES.has(it.genre as any)) return `Track ${idx}: Genre không hợp lệ`;
 
       if (enableDuration && it.duration.trim()) {
         const n = Number(it.duration.trim());
@@ -462,9 +507,7 @@ export function UploadTrackForm({
 
       {/* ALBUM */}
       <div className="space-y-1.5">
-        <label className="block text-xs font-medium text-slate-200">
-          {albumLabel}
-        </label>
+        <label className="block text-xs font-medium text-slate-200">{albumLabel}</label>
         {albums.length > 0 ? (
           <select
             className="w-full rounded-lg border border-sky-500/40 bg-slate-950/60 px-3 py-2 text-sm text-white outline-none ring-0 focus:border-sky-400 focus:ring-1 focus:ring-sky-400/70"
@@ -472,9 +515,7 @@ export function UploadTrackForm({
             onChange={(e) => setAlbumId(e.target.value)}
           >
             <option value="">
-              {forceAlbumSelect
-                ? "— Chọn album —"
-                : "— Single (không thuộc album) —"}
+              {forceAlbumSelect ? "— Chọn album —" : "— Single (không thuộc album) —"}
             </option>
             {albums.map((a) => (
               <option key={a.id} value={a.id}>
@@ -550,7 +591,11 @@ export function UploadTrackForm({
                   // ✅ auto duration theo file (nếu bật duration)
                   if (f && enableDuration) {
                     const sec = await getAudioDurationSeconds(f);
-                    if (sec > 0) setDuration(String(Math.round(sec)));
+                    if (sec > 0) {
+                      const rounded = Math.round(sec);
+                      setDuration(String(rounded)); // vẫn lưu giây
+                      setDurationMMSS(secondsToMMSS(rounded)); // hiển thị mm:ss
+                    }
                   }
                 }}
               />
@@ -567,9 +612,7 @@ export function UploadTrackForm({
                 className="block w-full cursor-pointer text-xs text-slate-200 file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-sky-600 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-slate-50 hover:file:bg-sky-500"
                 onChange={(e) => setCoverFile(e.target.files?.[0] || null)}
               />
-              <p className="text-[11px] text-slate-400">
-               
-              </p>
+              <p className="text-[11px] text-slate-400"></p>
             </div>
           </div>
 
@@ -578,19 +621,36 @@ export function UploadTrackForm({
             {enableDuration && (
               <div className="space-y-1.5">
                 <label className="block text-xs font-medium text-slate-200">
-                  Thời lượng (giây)
+                  Thời lượng (phút:giây)
                 </label>
+
                 <input
-                  type="number"
-                  min={0}
+                  type="text"
+                  inputMode="numeric"
                   className="w-full rounded-lg border border-indigo-500/40 bg-slate-950/60 px-3 py-2 text-sm text-white outline-none ring-0 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400/70"
-                  placeholder="Tự lấy từ file mp3 (có thể sửa)"
-                  value={duration}
-                  onChange={(e) => setDuration(e.target.value)}
+                  placeholder=""
+                  value={durationMMSS || (duration ? secondsToMMSS(duration) : "")}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setDurationMMSS(v);
+
+                    const sec = mmssToSeconds(v);
+                    if (!Number.isNaN(sec)) {
+                      setDuration(String(sec)); // vẫn lưu giây
+                    }
+                  }}
+                  onBlur={() => {
+                    const sec = mmssToSeconds(durationMMSS || "");
+                    const finalSec = Number.isNaN(sec)
+                      ? Math.max(0, Number(duration) || 0)
+                      : sec;
+
+                    setDuration(String(finalSec));
+                    setDurationMMSS(finalSec > 0 ? secondsToMMSS(finalSec) : "");
+                  }}
                 />
-                <p className="text-[11px] text-slate-400">
-                  Khi chọn mp3, hệ thống tự điền duration theo file.
-                </p>
+
+                
               </div>
             )}
 
@@ -721,27 +781,44 @@ export function UploadTrackForm({
                           </option>
                         ))}
                       </select>
-                      <p className="text-[11px] text-slate-400">
-                        
-                      </p>
+                      <p className="text-[11px] text-slate-400"></p>
                     </div>
 
                     {enableDuration && (
                       <div className="space-y-1.5">
                         <label className="block text-xs font-medium text-slate-200">
-                          Thời lượng (giây)
+                          Thời lượng (phút:giây)
                         </label>
+
                         <input
-                          type="number"
-                          min={0}
-                          value={it.duration}
-                          onChange={(e) => updateBatchItem(it.key, { duration: e.target.value })}
+                          type="text"
+                          inputMode="numeric"
+                          value={it.durationMMSS || (it.duration ? secondsToMMSS(it.duration) : "")}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            updateBatchItem(it.key, { durationMMSS: v });
+
+                            const sec = mmssToSeconds(v);
+                            if (!Number.isNaN(sec)) {
+                              updateBatchItem(it.key, { duration: String(sec) });
+                            }
+                          }}
+                          onBlur={() => {
+                            const sec = mmssToSeconds(it.durationMMSS || "");
+                            const finalSec = Number.isNaN(sec)
+                              ? Math.max(0, Number(it.duration) || 0)
+                              : sec;
+
+                            updateBatchItem(it.key, {
+                              duration: String(finalSec),
+                              durationMMSS: finalSec > 0 ? secondsToMMSS(finalSec) : "",
+                            });
+                          }}
                           className="w-full rounded-lg border border-indigo-500/30 bg-slate-950/60 px-3 py-2 text-sm text-white outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400/60"
-                          placeholder="Tự lấy từ file mp3 (có thể sửa)"
+                          placeholder=""
                         />
-                        <p className="text-[11px] text-slate-400">
-                         
-                        </p>
+
+                        
                       </div>
                     )}
                   </div>

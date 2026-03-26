@@ -154,7 +154,7 @@ export default function AdminUsersPage() {
                 Quản lý người dùng
               </h1>
               <p className="text-sm text-blue-200/80 mt-1">
-                Thay đổi quyền, xoá tài khoản vi phạm. Neon dashboard ✨
+                Thay đổi quyền, xoá tài khoản vi phạm. 
               </p>
             </div>
 

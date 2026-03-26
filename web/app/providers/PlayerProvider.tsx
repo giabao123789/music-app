@@ -268,7 +268,7 @@ export default function PlayerProvider({ children }: { children: React.ReactNode
     const onEnded = () => {
       setTime(el.duration || 0);
       setPlaying(false);
-      setIndex((i) => (i + 1 < queueRef.current.length ? i + 1 : i));
+      setIndex(index + 1 < queueRef.current.length ? index + 1 : index);
     };
 
     const beforeUnload = () => {
@@ -378,12 +378,12 @@ export default function PlayerProvider({ children }: { children: React.ReactNode
   }, []);
 
   const next = useCallback(() => {
-    setIndex((i) => (i + 1 < queue.length ? i + 1 : i));
-  }, [queue.length, setIndex]);
+    setIndex(index + 1 < queue.length ? index + 1 : index);
+  }, [queue.length, setIndex, index]);
 
   const prev = useCallback(() => {
-    setIndex((i) => (i > 0 ? i - 1 : 0));
-  }, [setIndex]);
+    setIndex(index > 0 ? index - 1 : 0);
+  }, [setIndex, index]);
 
   const seek = useCallback(
     (pct: number) => {

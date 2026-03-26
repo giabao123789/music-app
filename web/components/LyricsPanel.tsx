@@ -1,6 +1,6 @@
 "use client";
 
-import { usePlayer } from "../providers/PlayerProvider";
+import { usePlayer } from "../app/providers/PlayerProvider";
 import { AnimatePresence, motion } from "framer-motion";
 import { X } from "lucide-react";
 import { useEffect, useState } from "react";

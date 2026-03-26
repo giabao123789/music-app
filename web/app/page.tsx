@@ -111,7 +111,7 @@ const SLIDES = [
     subtitle:
       "Tự do tạo lập Playlist theo tâm trạng và lưu trữ thư viện nhạc yêu thích mọi lúc mọi nơi.",
     image:
-      "https://img.lovepik.com/bg/20240328/Boosting-Creativity-Brain-Wearing-Headphones-in-3D-Music-Illustration-with_5589349_wh1200.jpg",
+      "https://th.bing.com/th/id/R.35bc5fc9ee7cd5b104cbc30b23802837?rik=Ne%2fPEtz0DTd9ZQ&pid=ImgRaw&r=0",
   },
   {
     id: 4,
@@ -223,13 +223,13 @@ export default function HomePage() {
     const sortedByNew = [...tracks].sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
-    return sortedByNew.slice(0, 12) as unknown as Track[];
+    return sortedByNew.slice(0, 36) as unknown as Track[];
   }, [tracks]);
 
   const recommendSlides: Track[][] = useMemo(() => {
     const slides: Track[][] = [];
-    for (let i = 0; i < youMayLikeTracks.length; i += 6) {
-      slides.push(youMayLikeTracks.slice(i, i + 6));
+    for (let i = 0; i < youMayLikeTracks.length; i += 9) {
+      slides.push(youMayLikeTracks.slice(i, i + 9));
     }
     return slides;
   }, [youMayLikeTracks]);
@@ -286,8 +286,8 @@ export default function HomePage() {
     }
 
     const groups: TrackItem[][] = [];
-    for (let i = 0; i < shuffled.length; i += 3) {
-      groups.push(shuffled.slice(i, i + 3));
+    for (let i = 0; i < shuffled.length; i += 6) {
+      groups.push(shuffled.slice(i, i + 6));
     }
     return groups;
   }, [recentTracks, tracks]);
@@ -446,42 +446,7 @@ export default function HomePage() {
   return (
     <div className="min-h-screen flex text-slate-50 bg-transparent">
       {/* ==== SIDEBAR TRÁI ==== */}
-      <aside className="w-64 sidebar-gradient border-r border-white/10 px-4 py-6 space-y-6 hidden md:flex flex-col">
-        <nav className="space-y-1 text-sm">
-          <div className="text-xs uppercase tracking-widest text-slate-300 mb-1">Thư viện</div>
-          <Link href="/" className="flex items-center gap-2 px-3 py-2 rounded-md glass font-medium">
-            <span>Khám phá</span>
-          </Link>
-          <Link
-            href="/favorites"
-            className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-white/5 text-slate-100/80"
-          >
-            <span>Yêu thích</span>
-          </Link>
-          <Link
-            href="/playlists"
-            className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-white/5 text-slate-100/80"
-          >
-            <span>Playlist</span>
-          </Link>
-          <Link
-            href="/artists"
-            className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-white/5 text-slate-100/80"
-          >
-            <span>Nghệ sĩ</span>
-          </Link>
-        </nav>
-
-        <div className="border-t border-white/10 pt-4 mt-auto text-xs text-slate-200/70">
-          {user ? (
-            <div>
-              Đang đăng nhập: <span className="font-semibold text-slate-50">{user.email}</span>
-            </div>
-          ) : (
-            <div>Hãy đăng nhập để lưu playlist, yêu thích...</div>
-          )}
-        </div>
-      </aside>
+     
 
       {/* ==== MAIN CONTENT ==== */}
       <main className="flex-1 flex flex-col bg-transparent">
@@ -844,7 +809,11 @@ export default function HomePage() {
                       </div>
 
                       <div className="hidden sm:flex items-center gap-1 text-xs text-sky-300">
-                        👂 {track.popularity ?? 0}
+                        <img
+      src="/icons/play.png"
+      alt="plays"
+      className="h-3 w-3 opacity-80"
+    /> {track.popularity ?? 0}
                       </div>
 
                       <button
@@ -1025,7 +994,7 @@ export default function HomePage() {
             </section>
           )}
 
-          <ArtistCollectionsRow limit={12} visible={4} />
+          <ArtistCollectionsRow limit={12} visibleDesktop={4} />
           <FollowedArtistRow visibleDesktop={5} />
         </div>
       </main>

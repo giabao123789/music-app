@@ -1,6 +1,6 @@
 import "server-only";
 import { getServerSession } from "next-auth";
-import { authOptions } from "../../../../auth/[...nextauth]/route";
+import { authOptions } from "@/lib/auth";
 const BACKEND = (process.env.BACKEND_URL || "http://127.0.0.1:3001").replace(/\/+$/, "");
 
 export async function POST(_: Request, { params }: { params: { id: string; trackId: string } }) {

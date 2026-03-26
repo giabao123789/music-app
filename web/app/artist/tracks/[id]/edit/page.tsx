@@ -119,7 +119,7 @@ export default function EditTrackPage() {
 
         let target: ArtistTrack | null = null;
 
-        if (currentUser.role === "ADMIN") {
+        if (currentUser && currentUser.role === "ADMIN") {
           // ✅ ADMIN: lấy track theo id trực tiếp
           const res = await fetch(`${API_BASE}/admin/tracks/${trackId}`, {
             headers: { Authorization: `Bearer ${token}` },

@@ -154,7 +154,7 @@ export default function DiscoverPage() {
 
     try {
       // ----- SEARCH TRACKS -----
-      async function searchTracksCall() {
+      const searchTracksCall = async () => {
         // ưu tiên /tracks/search?q=...
         let res = await fetch(
           `${API_BASE}/tracks/search?q=${encodeURIComponent(q)}`
@@ -190,7 +190,7 @@ export default function DiscoverPage() {
       }
 
       // ----- SEARCH ARTISTS -----
-      async function searchArtistsCall() {
+      const searchArtistsCall = async () => {
         // nếu backend bạn hỗ trợ query ?search= thì nó sẽ match
         const res = await fetch(
           `${API_BASE}/artist?search=${encodeURIComponent(q)}`
