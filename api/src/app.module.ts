@@ -1,0 +1,39 @@
+// api/src/app.module.ts
+import { Module } from '@nestjs/common';
+import { RecommendationsModule } from './recommendations/recommendations.module';
+
+import { PrismaModule } from './prisma/prisma.module';
+import { TracksModule } from './tracks/tracks.module';
+import { PlaylistsModule } from './playlists/playlists.module';
+import { FavoritesModule } from './favorites/favorites.module';
+import { AuthModule } from './auth/auth.module';
+import { OtpModule } from './otp/otp.module';
+import { MailModule } from './mail/mail.module';
+import { ArtistModule } from './artist/artist.module';
+import { AdminModule } from './admin/admin.module';
+import { AlbumsModule } from './albums/albums.module';
+import { FollowsModule } from './follows/follows.module';
+import { CommentsModule } from './comments/comments.module';
+import { NotificationsModule } from './notifications/notifications.module';
+@Module({
+  imports: [
+    AlbumsModule,
+    PrismaModule,
+    MailModule,
+    OtpModule,
+    AuthModule,
+    TracksModule,
+    PlaylistsModule,
+    FavoritesModule,
+    ArtistModule,
+    AdminModule,
+    FollowsModule,
+    CommentsModule,
+    RecommendationsModule,
+    NotificationsModule,
+
+  ],
+  // ❌ Tuyệt đối KHÔNG dùng APP_GUARD ở đây
+  providers: [],
+})
+export class AppModule {}
