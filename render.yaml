@@ -30,6 +30,10 @@ services:
         sync: false
       - key: SMTP_FROM
         value: Music App
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3001"
 
   # ── Frontend (Next.js) ────────────────────────────────────
   - type: web

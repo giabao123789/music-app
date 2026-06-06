@@ -15,25 +15,11 @@ import {
 import { ArtistService } from './artist.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { extname } from 'path';
+import { uploadToCloudinary } from './cloudinary.util';
 
 /* =======================
    Upload helpers
 ======================= */
-function editFileName(
-  _req: any,
-  file: Express.Multer.File,
-  callback: (error: Error | null, filename: string) => void,
-) {
-  const name = file.originalname.split('.')[0];
-  const fileExtName = extname(file.originalname);
-  const randomName = Array(4)
-    .fill(null)
-    .map(() => Math.round(Math.random() * 16).toString(16))
-    .join('');
-  callback(null, `${name}-${Date.now()}-${randomName}${fileExtName}`);
-}
 
 @Controller('artist')
 export class ArtistController {
@@ -150,32 +136,20 @@ async updateProfile(@Req() req: any, @Body() body: any) {
      Upload
   ======================= */
 
-  @Post('me/upload-cover')
-  @UseInterceptors(
-    FileInterceptor('file', {
-      storage: diskStorage({
-        destination: './uploads/images',
-        filename: editFileName,
-      }),
-    }),
-  )
-  uploadCover(@UploadedFile() file: Express.Multer.File) {
+@Post('me/upload-cover')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadCover(@UploadedFile() file: any) {
     if (!file) throw new BadRequestException('No file uploaded');
-    return { url: `/uploads/images/${file.filename}` };
+    const url = await uploadToCloudinary(file.buffer, 'covers', 'image');
+    return { url };
   }
 
   @Post('me/upload-audio')
-  @UseInterceptors(
-    FileInterceptor('file', {
-      storage: diskStorage({
-        destination: './uploads/audio',
-        filename: editFileName,
-      }),
-    }),
-  )
-  uploadAudio(@UploadedFile() file: Express.Multer.File) {
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadAudio(@UploadedFile() file: any) {
     if (!file) throw new BadRequestException('No file uploaded');
-    return { url: `/uploads/audio/${file.filename}` };
+    const url = await uploadToCloudinary(file.buffer, 'music', 'video');
+    return { url };
   }
 
   @Post('me/upload-track')
