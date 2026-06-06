@@ -17,3 +17,5 @@ uploads/
 # Logs
 *.log
 
+.env
+.env.*
