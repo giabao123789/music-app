@@ -1,5 +1,6 @@
 // api/src/app.module.ts
 import { Module } from '@nestjs/common';
+import { HealthController } from './health.controller';
 import { RecommendationsModule } from './recommendations/recommendations.module';
 
 import { PrismaModule } from './prisma/prisma.module';
@@ -33,6 +34,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     NotificationsModule,
 
   ],
+  controllers: [HealthController],
   // ❌ Tuyệt đối KHÔNG dùng APP_GUARD ở đây
   providers: [],
 })

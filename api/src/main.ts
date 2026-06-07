@@ -29,12 +29,17 @@ async function bootstrap() {
   });
 
   
-  app.useStaticAssets(join(process.cwd(), '..', 'web', 'public', 'music'), {
-    prefix: '/music',
-    setHeaders: (res) => {
-      res.setHeader('Accept-Ranges', 'bytes');
-    },
-  });
+  // ✅ Chỉ serve /music nếu thư mục tồn tại (tránh crash trên Render)
+  const musicPath = join(process.cwd(), '..', 'web', 'public', 'music');
+  const { existsSync } = await import('fs');
+  if (existsSync(musicPath)) {
+    app.useStaticAssets(musicPath, {
+      prefix: '/music',
+      setHeaders: (res) => {
+        res.setHeader('Accept-Ranges', 'bytes');
+      },
+    });
+  }
 
   app.useLogger(['error', 'warn', 'debug', 'verbose', 'log']);
 
